@@ -1,0 +1,127 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "",
+  "installCommand": "",
+  "framework": null,
+  "outputDirectory": ".",
+  "redirects": [
+    {
+      "source": "/wholesale/login",
+      "destination": "/login",
+      "permanent": true
+    },
+    {
+      "source": "/wholesale/login/:path*",
+      "destination": "/login",
+      "permanent": true
+    },
+    {
+      "source": "/sales-rep/login",
+      "destination": "/login",
+      "permanent": true
+    },
+    {
+      "source": "/sales-rep/login/:path*",
+      "destination": "/login",
+      "permanent": true
+    },
+    { "source": "/cpa/login", "destination": "/login", "permanent": true },
+    {
+      "source": "/cpa/login/:path*",
+      "destination": "/login",
+      "permanent": true
+    },
+    {
+      "source": "/terms-of-service",
+      "destination": "/terms",
+      "permanent": true
+    },
+    {
+      "source": "/privacy",
+      "destination": "/privacy-policy",
+      "permanent": true
+    },
+    {
+      "source": "/autovault-landing_37.html",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/wholesale/dashboard",
+      "destination": "/dashboard?portal=wholesale",
+      "permanent": false
+    },
+    {
+      "source": "/wholesale/dashboard/:path*",
+      "destination": "/dashboard?portal=wholesale",
+      "permanent": false
+    },
+    {
+      "source": "/sales-rep/dashboard",
+      "destination": "/dashboard?portal=sales_rep",
+      "permanent": false
+    },
+    {
+      "source": "/sales-rep/dashboard/:path*",
+      "destination": "/dashboard?portal=sales_rep",
+      "permanent": false
+    },
+    {
+      "source": "/accept-invitation",
+      "destination": "/invite",
+      "permanent": true
+    },
+    {
+      "source": "/accept-invitation/:path*",
+      "destination": "/invite",
+      "permanent": true
+    }
+  ],
+  "rewrites": [
+    { "source": "/cpa/dashboard", "destination": "/dashboard" },
+    { "source": "/cpa/dashboard/:path*", "destination": "/dashboard" },
+    { "source": "/owner/login", "destination": "/login" },
+    { "source": "/owner/login/:path*", "destination": "/login" },
+    { "source": "/owner/dashboard", "destination": "/dashboard" },
+    { "source": "/owner/dashboard/:path*", "destination": "/dashboard" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(self), microphone=(), geolocation=()"
+        }
+      ]
+    },
+    {
+      "source": "/(dashboard|login|invite|accept-invitation|reset-password|forgot-password|thank-you|owner|wholesale|sales-rep|cpa)(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
+    },
+    {
+      "source": "/(.*)\\.(js|css|svg|png|webp|ico|woff2)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, stale-while-revalidate=604800"
+        }
+      ]
+    },
+    {
+      "source": "/(robots.txt|sitemap.xml)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
+    }
+  ],
+  "cleanUrls": true,
+  "trailingSlash": false
+}

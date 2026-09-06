@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en" data-av-surface="landing">
+<head>
+  <meta charset="UTF-8" />
+  <script>
+    (function () {
+      try {
+        var s = localStorage.getItem("av-landing-theme");
+        var dark = s === "dark";
+        var r = document.documentElement;
+        r.classList.toggle("dark", dark);
+        r.classList.toggle("bright", !dark);
+        r.style.colorScheme = dark ? "dark" : "light";
+      } catch (e) {}
+    })();
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Account Created — AutoVault</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#E6E8EF" data-theme-light="#E6E8EF" data-theme-dark="#0A0D10" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/auth-flow.css" />
+</head>
+<body>
+  <div class="backdrop" aria-hidden="true"><div class="grid-lines"></div></div>
+
+  <div class="login-utils">
+    <div class="nav-utils" aria-label="Language and theme">
+      <button type="button" class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Switch theme" aria-label="Toggle theme"></button>
+      <a href="#" class="lang-btn" title="Español" aria-label="Switch to Spanish">ES</a>
+    </div>
+    <a href="/" class="login-close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+      <span>Back to Home</span>
+    </a>
+  </div>
+
+  <section class="af-view">
+    <div class="af-bg" aria-hidden="true"><div class="af-grid"></div><div class="af-aura"></div></div>
+    <div class="af-shell af-shell-wide">
+      <div class="af-card af-card-center" id="panel">
+        <a href="/" class="af-brand af-brand-center">
+          <span class="af-mark" aria-hidden="true">
+            <svg viewBox="0 0 120 78" width="64" height="30" focusable="false"><path d="M16 12 L42 64 L68 12" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/><path d="M52 64 L78 12 L104 64" fill="none" stroke="var(--accent)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="af-name">AutoVault</span>
+        </a>
+
+        <div class="af-icon spin" id="statusIcon" aria-hidden="true">
+          <svg id="iconSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9" opacity=".35"/><path d="M12 3a9 9 0 0 1 9 9"/></svg>
+        </div>
+
+        <span class="af-eyebrow" id="eyebrow" hidden>Account Created</span>
+        <h1 class="af-title" id="title">Finishing setup…</h1>
+        <p class="af-sub" id="desc">We're confirming your account. This only takes a moment.</p>
+        <p class="af-sub af-expiry-wrap" id="confirmExpiryWrap" hidden><strong id="confirmExpiry" class="af-expiry"></strong></p>
+
+        <div class="af-email-box" id="emailBox" hidden>
+          <p class="label">Login credentials sent to</p>
+          <p class="value" id="userEmail"></p>
+        </div>
+
+        <p class="af-sub" id="spamNote" hidden style="font-size:14px;margin-top:0;">
+          Please check your inbox, and if you don't see the email, be sure to check your Spam/Junk folder.
+        </p>
+
+        <a class="af-btn af-btn-inline" id="nextLoginBtn" href="/login" hidden>Go to Login Page</a>
+        <p class="af-foot" id="footNote">You'll stay on this page until you continue to login.</p>
+      </div>
+    </div>
+  </section>
+
+  <script src="/api-config.js"></script>
+  <script src="/landing-es-dict.js"></script>
+  <script src="/auth-flow-ui.js"></script>
+  <script>
+    (async function () {
+      const API_URL = window.AVApiConfig
+        ? AVApiConfig.resolveApiUrl()
+        : (window.AUTOVAULT_API_URL || "https://api.autovault360.com");
+
+      const panel = document.getElementById("panel");
+      const statusIcon = document.getElementById("statusIcon");
+      const eyebrow = document.getElementById("eyebrow");
+      const title = document.getElementById("title");
+      const desc = document.getElementById("desc");
+      const emailBox = document.getElementById("emailBox");
+      const userEmail = document.getElementById("userEmail");
+      const spamNote = document.getElementById("spamNote");
+      const nextLoginBtn = document.getElementById("nextLoginBtn");
+      const confirmExpiryWrap = document.getElementById("confirmExpiryWrap");
+      const confirmExpiry = document.getElementById("confirmExpiry");
+
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("token");
+      const emailFromQuery = (params.get("email") || "").trim();
+
+      const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>';
+      const ERR_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>';
+
+      function emailFromJwt(jwt) {
+        try {
+          const part = jwt.split(".")[1];
+          if (!part) return "";
+          const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
+          const payload = JSON.parse(json);
+          return (payload.email || "").trim();
+        } catch {
+          return "";
+        }
+      }
+
+      function jwtExpiresAt(jwt) {
+        try {
+          const part = jwt.split(".")[1];
+          if (!part) return null;
+          const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
+          const payload = JSON.parse(json);
+          if (!payload.exp) return null;
+          return new Date(payload.exp * 1000).toISOString();
+        } catch {
+          return null;
+        }
+      }
+
+      function showEmail(email) {
+        const value = (email || "").trim() || "your email";
+        userEmail.textContent = value;
+        emailBox.hidden = false;
+      }
+
+      function startConfirmCountdown(jwt) {
+        const expiresAt = jwtExpiresAt(jwt);
+        if (!expiresAt || !window.AVAuthFlow) return;
+        confirmExpiryWrap.hidden = false;
+        AVAuthFlow.startCountdown(confirmExpiry, expiresAt);
+      }
+
+      function showSuccess(email, loginPath) {
+        statusIcon.classList.remove("spin", "error");
+        statusIcon.classList.add("ok");
+        statusIcon.innerHTML = CHECK_SVG;
+        eyebrow.hidden = false;
+        title.textContent = "Welcome to AutoVault!";
+        desc.textContent = "Your account has been created successfully.";
+        showEmail(email);
+        spamNote.hidden = false;
+        nextLoginBtn.hidden = false;
+        confirmExpiryWrap.hidden = true;
+        if (loginPath) nextLoginBtn.href = loginPath;
+      }
+
+      function showError(heading, message) {
+        panel.classList.add("state-error");
+        statusIcon.classList.remove("spin", "ok");
+        statusIcon.classList.add("error");
+        statusIcon.innerHTML = ERR_SVG;
+        eyebrow.hidden = true;
+        title.textContent = heading;
+        desc.textContent = message;
+        emailBox.hidden = true;
+        spamNote.hidden = true;
+        nextLoginBtn.hidden = false;
+        nextLoginBtn.textContent = "Back to Home";
+        nextLoginBtn.href = "/";
+        confirmExpiryWrap.hidden = true;
+      }
+
+      const immediateEmail = emailFromQuery || (token ? emailFromJwt(token) : "");
+      if (immediateEmail) showEmail(immediateEmail);
+      if (token) startConfirmCountdown(token);
+
+      if (!token) {
+        showError(
+          "Invalid confirmation link",
+          "Token is missing. Please return to the landing page and try again.",
+        );
+        return;
+      }
+
+      try {
+        const resp = await fetch(
+          `${API_URL}/api/registrations/complete?token=${encodeURIComponent(token)}`,
+        );
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          throw new Error(
+            data.message || data.error?.message || "Unable to verify purchase.",
+          );
+        }
+
+        const reg = data.registration || {};
+        const email = reg.loginEmail || reg.email || immediateEmail || "";
+        showSuccess(email, reg.loginPath);
+      } catch (err) {
+        const msg = (err && err.message) || "";
+        const alreadyUsed = /no longer valid|invalid or expired|already/i.test(msg);
+        if (alreadyUsed && immediateEmail) {
+          showSuccess(immediateEmail, "/login");
+          return;
+        }
+        showError(
+          "Could not verify purchase",
+          msg || "Your confirmation link is invalid or expired. Please contact support.",
+        );
+      }
+    })();
+  </script>
+</body>
+</html>

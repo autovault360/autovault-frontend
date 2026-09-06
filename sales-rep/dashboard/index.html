@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sales Rep Portal | AutoVault360</title>
+  <meta name="description" content="AutoVault360 sales-rep portal — track deals, commissions, customers, and leads." />
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="canonical" href="/dashboard" />
+  <script>
+    (function () {
+      var search = location.search || "";
+      var hash = location.hash || "#rep-dashboard";
+      var params = new URLSearchParams(search);
+      // Unified SPA lives at /dashboard with portal=sales_rep.
+      // Preserve impHandoff (admin "login as rep") and any other query flags.
+      if (!params.has("portal")) params.set("portal", "sales_rep");
+      var qs = params.toString();
+      var target =
+        "/dashboard" + (qs ? "?" + qs : "?portal=sales_rep") + hash;
+      window.location.replace(target);
+    })();
+  </script>
+</head>
+<body>
+  <p>Redirecting to sales-rep dashboard… <a href="/dashboard?portal=sales_rep#rep-dashboard">Continue</a></p>
+</body>
+</html>
