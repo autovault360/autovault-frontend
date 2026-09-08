@@ -36,6 +36,15 @@
 <meta name="twitter:title" content="AutoVault — The Dealership Operating System" />
 <meta name="twitter:description" content="AutoVault brings inventory, sales, commissions, payments, taxes, and profit into one platform built for how dealerships actually run. Your first month is on us." />
 <meta name="twitter:image" content="https://www.autovault360.com/og-image.png" />
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-BD02GW14CW"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-BD02GW14CW');
+</script>
 <script src="/api-config.js"></script>
 <script src="/auth-portal.js"></script>
 <script>
@@ -803,6 +812,21 @@
   .reveal{opacity:0;transform:translateY(24px);transition:opacity .7s ease,transform .7s ease}
   .reveal.in{opacity:1;transform:none}
 
+  /* Explore accordion (folded deep sections) */
+  details.deep .reveal{opacity:1;transform:none}
+  .deep-intro{text-align:center;margin:22px auto 0;max-width:680px;padding:0 24px}
+  .deep-intro h2{margin:6px 0 8px}
+  .deep-sub{color:var(--muted);font-size:16px;line-height:1.6}
+  details.deep{max-width:1180px;margin:14px auto 0;padding:0 24px}
+  .deep-sum{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:12px;margin:0 auto;max-width:540px;padding:16px 26px;border:1px solid var(--line);border-radius:16px;background:var(--panel);font-weight:700;font-size:17px;color:var(--text);transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
+  .deep-sum::-webkit-details-marker{display:none}
+  .deep-sum:hover{transform:translateY(-2px);border-color:var(--accent);box-shadow:0 12px 32px rgba(0,0,0,.12)}
+  html.dark .deep-sum{border-color:var(--line);background:var(--ink-2)}
+  .deep-chev{transition:transform .25s ease;flex-shrink:0}
+  details.deep[open] .deep-chev{transform:rotate(180deg)}
+  details.deep[open] .deep-sum{margin-bottom:6px}
+  .deep-body{padding-top:6px}
+
   /* ============ RESPONSIVE ============ */
   @media(max-width:1024px){
     .hero-grid{grid-template-columns:1fr;gap:44px}
@@ -1537,7 +1561,7 @@
     <nav class="nav-links" id="navlinks">
       <div class="nav-primary">
         <a href="#jenna">Jenna</a>
-        <a href="#wholesale" hidden>Wholesale</a>
+        <a href="#wholesale">Wholesale</a>
         <a href="#finance">Profit Tracker</a>
         <a href="#about">About</a>
         <a href="/contact">Contact</a>
@@ -1545,7 +1569,7 @@
       <div class="nav-end">
         <div class="nav-utils">
           <button type="button" class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Switch theme" aria-label="Toggle theme"></button>
-          <a href="#" class="lang-btn" id="langBtn" title="Español" aria-label="Switch to Spanish">ES</a>
+          <a href="#" class="lang-btn" id="langBtn" title="Español" aria-label="Switch to Spanish">Español</a>
         </div>
         <span class="nav-social" role="group" aria-label="Social media">
           <a class="ig" href="https://www.instagram.com/autovault_360?igsi=MzRlODBiNWFlZA==" target="_blank" rel="noopener" aria-label="AutoVault on Instagram" title="Instagram">
@@ -1595,7 +1619,7 @@
     <div class="nav-tools">
       <div class="nav-utils" aria-label="Language and theme">
         <button type="button" class="theme-toggle" id="themeToggleBtnMobile" onclick="toggleTheme()" title="Switch theme" aria-label="Toggle theme"></button>
-        <a href="#" class="lang-btn" title="Español" aria-label="Switch to Spanish">ES</a>
+        <a href="#" class="lang-btn" title="Español" aria-label="Switch to Spanish">Español</a>
       </div>
       <button class="nav-toggle" id="navToggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="navlinks">
         <span class="nav-toggle-box" aria-hidden="true"><span></span><span></span><span></span></span>
@@ -1630,7 +1654,6 @@
       </div>
 
       <span class="eyebrow">The Dealership Operating System</span>
-      <h1>One live dashboard for every vehicle and every dollar.</h1>
       <div class="hero-split">
         <div class="hero-box">
           <div class="hb-tag">The problem</div>
@@ -1796,10 +1819,7 @@
               </div>
 
             </div>
-            <div id="appCaption" class="app-caption" style="padding:14px 18px 4px;border-top:1px solid var(--line-soft)">
-              <h3 style="font-family:var(--ff-display);font-size:16px;margin:0 0 4px;color:var(--text)">The dashboard — your whole operation, live</h3>
-              <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.5">Net profit, revenue, gross profit and commissions owed, updated in real time — plus your top-selling reps and your entire inventory mix at a glance.</p>
-            </div>
+
             </div>
           </div>
         </div>
@@ -1891,18 +1911,24 @@
 <!-- ============ SOCIAL PROOF ============ -->
 <section class="sec" id="proof" style="padding-top:6px">
   <div class="wrap">
-    <div class="proof-stats reveal">
-      <div class="pstat"><div class="pv">4K<span>/mo</span></div><div class="pl">avg. hidden profit dealers surface after switching</div></div>
+<div class="proof-stats reveal">
+      <div class="pstat"><div class="pv">$14K<span>/mo</span></div><div class="pl">avg. hidden profit dealers surface after switching</div></div>
       <div class="pstat"><div class="pv">128</div><div class="pl">vehicles tracked per lot, on average</div></div>
       <div class="pstat"><div class="pv">12</div><div class="pl">states filing tax-ready from one platform</div></div>
     </div>
-    <div class="proof-quotes reveal">
-      <div class="pquote"><div class="stars">★★★★★</div><p>&ldquo;I found $9,000 in flooring costs I&rsquo;d stopped tracking. AutoVault paid for itself the first week.&rdquo;</p><div class="by">Marcus D. <span>&middot; Independent dealer, 40-car lot</span></div></div>
-      <div class="pquote"><div class="stars">★★★★★</div><p>&ldquo;Tax season used to eat three weeks. Now my accountant logs in and files &mdash; done.&rdquo;</p><div class="by">Priya S. <span>&middot; Riverside Auto Group</span></div></div>
-      <div class="pquote"><div class="stars">★★★★★</div><p>&ldquo;Every rep sees their own numbers, so the commission arguments stopped overnight.&rdquo;</p><div class="by">Luis T. <span>&middot; Used-car manager</span></div></div>
-    </div>
+
   </div>
 </section>
+
+<!-- ============ EXPLORE (folded deep sections) ============ -->
+<div class="wrap deep-intro reveal">
+  <span class="eyebrow">Go deeper</span>
+  <h2>Want to see everything under the hood?</h2>
+  <p class="deep-sub">The essentials are above. Expand to explore the full platform &mdash; the profit tracker, sales tax, payroll, your whole desk, and wholesale.</p>
+</div>
+<details class="deep">
+  <summary class="deep-sum"><span>Explore the full platform</span><svg class="deep-chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></summary>
+  <div class="deep-body">
 
 <!-- ============ BENEFITS ============ -->
 <section class="sec">
@@ -2068,7 +2094,7 @@
             <div class="tr-d">July 31, 2026</div>
             <div class="tr-s">Quarterly filing · reminder set 7 days before</div>
           </div>
-          <span class="tax-chip due" id="taxDueIn">Due soon</span>
+          <span class="tax-chip due" id="taxDueIn">Due in 28 days</span>
         </div>
         <div class="tax-sub">Filing schedule · Quarterly</div>
         <div class="sched">
@@ -2103,7 +2129,7 @@
 </section>
 
 <!-- ============ WHOLESALERS (hidden while Fully Loaded is the only sold plan) ============ -->
-<section class="sec" id="wholesale" hidden style="padding-top:0">
+<section class="sec" id="wholesale" style="padding-top:0">
   <div class="wrap">
     <div class="show2">
       <div class="ws-visual reveal">
@@ -2253,6 +2279,9 @@
   </div>
 </section>
 
+  </div><!-- /.deep-body -->
+</details>
+
 <!-- ============ ABOUT / MISSION ============ -->
 <section class="sec" id="about">
   <div class="wrap">
@@ -2319,7 +2348,7 @@
             <li><span class="pk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span><span><b>Every module included</b> &mdash; inventory, sales tax, payroll, P&amp;L, and Jenna AI.</span></li>
             <li><span class="pk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span><span><b>Cancel anytime</b> &mdash; no setup fees, no long-term contract.</span></li>
           </ul>
-          <p class="price-note">Your first month is free. A card is required at checkout so billing can start automatically after the free month.</p>
+          <p class="price-note">Introductory pricing for dealers who start now &mdash; no credit card required to get going.</p>
         </div>
 
         <div class="wl-form">
@@ -2991,7 +3020,7 @@
     }
     function paintLang(){
       langBtns.forEach(function(btn){
-        btn.textContent=es?"EN":"ES";
+        btn.textContent=es?"English":"Español";
         btn.title=es?"English":"Español";
         btn.setAttribute("aria-label", es?"Switch to English":"Switch to Spanish");
       });
