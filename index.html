@@ -45,6 +45,8 @@
 
   gtag('config', 'G-BD02GW14CW');
 </script>
+<script src="/ga.js"></script>
+<noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=2667115627038009&ev=PageView&noscript=1" alt="" /></noscript>
 <script src="/api-config.js"></script>
 <script src="/auth-portal.js"></script>
 <script>
@@ -2764,13 +2766,15 @@
     try{
       const submitBtn=form.querySelector('button[type="submit"]');
       if(submitBtn){ submitBtn.disabled=true; submitBtn.textContent=tr('Saving...'); }
+      const eventId=window.AVAnalytics&&AVAnalytics.newEventId?AVAnalytics.newEventId():undefined;
       const resp=await fetch(API_URL+'/api/registrations',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({name,email,phone,dealership:dealer,zipCode,state})
+        body:JSON.stringify({name,email,phone,dealership:dealer,zipCode,state,eventId})
       });
       const data=await resp.json();
       if(!resp.ok) throw new Error(data.error?.message||data.message||tr('Unable to save registration.'));
+      if(window.AVAnalytics) AVAnalytics.event('form_submit',{event_id:eventId});
       activeRegistrationId=data.registrationId;
       gsStep1.style.display='none';
       gsStep2.hidden=false;

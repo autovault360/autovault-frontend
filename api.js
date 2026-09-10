@@ -419,7 +419,12 @@
     },
     getVehicle: (id) => request(`/api/v1/vehicles/${id}`),
     createVehicle: (body) =>
-      request("/api/v1/vehicles", { method: "POST", body: JSON.stringify(body) }),
+      request("/api/v1/vehicles", { method: "POST", body: JSON.stringify(body) }).then(
+        function (res) {
+          if (global.AVAnalytics) global.AVAnalytics.trackIfFirstVehicle(res);
+          return res;
+        },
+      ),
     updateVehicle: (id, body) =>
       request(`/api/v1/vehicles/${id}`, {
         method: "PATCH",
@@ -457,6 +462,9 @@
       request("/api/v1/vehicles/previous-sold", {
         method: "POST",
         body: JSON.stringify(body),
+      }).then(function (res) {
+        if (global.AVAnalytics) global.AVAnalytics.trackIfFirstVehicle(res);
+        return res;
       }),
     markLoss: (id, body) =>
       request(`/api/v1/vehicles/${id}/mark-loss`, {
@@ -730,6 +738,9 @@
       request("/api/v1/wholesale/vehicles", {
         method: "POST",
         body: JSON.stringify(body),
+      }).then(function (res) {
+        if (global.AVAnalytics) global.AVAnalytics.trackIfFirstVehicle(res);
+        return res;
       }),
     updateWholesaleVehicle: (id, body) =>
       request(`/api/v1/wholesale/vehicles/${id}`, {
