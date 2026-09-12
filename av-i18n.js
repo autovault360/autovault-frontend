@@ -47,13 +47,19 @@
     if (en2es) {
       for (var k in en2es) {
         if (en2es[k] === k) continue;
-        _monthRulesEs.push({ re: new RegExp("\\b" + k + "\\b", "g"), rep: en2es[k] });
+        _monthRulesEs.push({
+          re: new RegExp("\\b" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "g"),
+          rep: en2es[k],
+        });
       }
     }
     if (es2en) {
       for (var ek in es2en) {
         if (es2en[ek] === ek) continue;
-        _monthRulesEn.push({ re: new RegExp("\\b" + ek + "\\b", "g"), rep: es2en[ek] });
+        _monthRulesEn.push({
+          re: new RegExp("\\b" + ek.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "g"),
+          rep: es2en[ek],
+        });
       }
     }
   }
@@ -69,23 +75,40 @@
       rules[i].re.lastIndex = 0;
       if (rules[i].re.test(out)) {
         rules[i].re.lastIndex = 0;
-        out = out.replace(rules[i].re, rules[i].rep);
+        out = out.replace(rules[i].re, function () {
+          return rules[i].rep;
+        });
         hit = true;
       }
     }
     return hit ? out : val;
   }
 
+  function safeSwap(src, from, to) {
+    if (!from || from === to || src == null) return src;
+    var i = String(src).indexOf(from);
+    if (i < 0) return src;
+    return String(src).slice(0, i) + to + String(src).slice(i + from.length);
+  }
+
+  function lookupExact(map, token) {
+    if (!map || token == null || token === "") return null;
+    if (!Object.prototype.hasOwnProperty.call(map, token)) return null;
+    var next = map[token];
+    if (next == null || next === token) return null;
+    return next;
+  }
+
   function translateToken(raw, toEs) {
     var t = (raw || "").trim();
     if (!t) return raw;
     if (toEs) {
-      var d = buildDict();
-      if (d[t] != null && d[t] !== t) return raw.replace(t, d[t]);
+      var next = lookupExact(buildDict(), t);
+      if (next != null) return safeSwap(raw, t, next);
       return txMonths(raw, true);
     }
-    var rev = buildRevDict();
-    if (rev[t] != null && rev[t] !== t) return raw.replace(t, rev[t]);
+    var back = lookupExact(buildRevDict(), t);
+    if (back != null) return safeSwap(raw, t, back);
     return txMonths(raw, false);
   }
 
@@ -94,8 +117,8 @@
     if (en == null) return en;
     var s = String(en);
     if (document.documentElement.lang !== "es") return s;
-    var d = buildDict();
-    if (d[s] != null) return d[s];
+    var next = lookupExact(buildDict(), s);
+    if (next != null) return next;
     return txMonths(s, true);
   };
 
@@ -109,7 +132,8 @@
       var t = (el.getAttribute(attr) || "").trim();
       if (!t) continue;
       if (toEs) {
-        var next = d[t] != null ? d[t] : txMonths(t, true);
+        var hit = lookupExact(d, t);
+        var next = hit != null ? hit : txMonths(t, true);
         if (next !== t) {
           if (el[store] === undefined) el[store] = el.getAttribute(attr);
           el.setAttribute(attr, next);
@@ -131,7 +155,8 @@
         if (skipTags[p.tagName]) return NodeFilter.FILTER_REJECT;
         if (p.id === "langToggle" || (p.classList && p.classList.contains("lang-btn")))
           return NodeFilter.FILTER_REJECT;
-        if (p.closest && p.closest("[data-no-i18n]")) return NodeFilter.FILTER_REJECT;
+        if (p.closest && p.closest("[data-no-i18n]"))
+          return NodeFilter.FILTER_REJECT;
         return n.nodeValue && n.nodeValue.trim()
           ? NodeFilter.FILTER_ACCEPT
           : NodeFilter.FILTER_REJECT;
@@ -146,7 +171,8 @@
         if (n.__en === undefined) n.__en = raw;
         var src = n.__en;
         var t = src.trim();
-        if (d[t] != null && d[t] !== t) n.nodeValue = src.replace(t, d[t]);
+        var hit = lookupExact(d, t);
+        if (hit != null) n.nodeValue = safeSwap(src, t, hit);
         else {
           var m = txMonths(src, true);
           n.nodeValue = m !== src ? m : src;
@@ -163,7 +189,8 @@
       scope.querySelectorAll("input[placeholder],textarea[placeholder]").forEach(function (el) {
         var t = (el.getAttribute("placeholder") || "").trim();
         if (toEs) {
-          var next = d[t] != null ? d[t] : txMonths(t, true);
+          var phHit = lookupExact(d, t);
+          var next = phHit != null ? phHit : txMonths(t, true);
           if (next !== t) {
             if (el.__ph === undefined) el.__ph = el.getAttribute("placeholder");
             el.setAttribute("placeholder", next);
@@ -243,6 +270,7 @@
     applying = true;
     if (!opts.noObserver) stopObserver();
     document.documentElement.lang = toEs ? "es" : "en";
+    document.documentElement.setAttribute("translate", "no");
     try {
       localStorage.setItem(STORAGE_KEY, toEs ? "es" : "en");
     } catch (_) {}

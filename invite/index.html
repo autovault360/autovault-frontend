@@ -252,6 +252,7 @@
             refreshToken: loginRes.refreshToken,
             portal,
           });
+          try { localStorage.removeItem("av_trial_banner_dismissed"); } catch (e) {}
           showMsg("Account created. Signing you in...", "ok");
           setTimeout(function () {
             location.replace(

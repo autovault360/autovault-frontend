@@ -116,6 +116,9 @@
         const summary = await AVApi.dashboardSummary().catch(() => null);
         window.AV_LIVE_SUMMARY = summary;
         window.AV_LIVE_MODE = true;
+        if (window.AVBilling && typeof window.AVBilling.loadBilling === "function") {
+          window.AVBilling.loadBilling({ withHistory: false }).catch(function () {});
+        }
         window.dispatchEvent(
           new CustomEvent("av:crm-live", { detail: { live: true, portal: "wholesale" } }),
         );
@@ -426,6 +429,9 @@
 
       window.AV_LIVE_SUMMARY = summary;
       window.AV_LIVE_MODE = true;
+      if (window.AVBilling && typeof window.AVBilling.loadBilling === "function") {
+        window.AVBilling.loadBilling({ withHistory: false }).catch(function () {});
+      }
       window.AV_LIVE_NOTIFICATIONS = notifResp;
       window.dispatchEvent(
         new CustomEvent("autovault:data-ready", {
