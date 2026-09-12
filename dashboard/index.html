@@ -1,7 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" translate="no">
   <head>
     <meta charset="UTF-8" />
+    <meta name="google" content="notranslate" />
     <script>
       (function () {
         try {
@@ -19,6 +20,9 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <title>AutoVault360 CRM</title>
     <meta name="robots" content="noindex, nofollow" />
     <meta name="description" content="AutoVault dealership CRM — inventory, sales, tax, payroll, and profit." />
@@ -164,8 +168,54 @@
         color: var(--text);
         font-family: "Inter", "Segoe UI", system-ui, sans-serif;
         -webkit-font-smoothing: antialiased;
+        font-synthesis: none;
         display: flex;
         align-items: flex-start;
+      }
+
+      #avTrialBanner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        z-index: 200;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding: 10px 44px 10px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        background: #2743e8;
+        color: #fff;
+        box-sizing: border-box;
+      }
+      #avTrialBannerClose {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font-size: 22px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 4px 8px;
+        opacity: 0.85;
+      }
+      #avTrialBannerClose:hover {
+        opacity: 1;
+      }
+      body.has-trial-banner {
+        padding-top: 48px;
+      }
+      body.has-trial-banner .sidebar {
+        top: 48px;
+        height: calc(100vh - 48px);
+        height: calc(100dvh - 48px);
       }
 
       /* SIDEBAR — pinned to viewport while main content scrolls */
@@ -1943,7 +1993,7 @@
         display: none;
         align-items: center;
         justify-content: center;
-        z-index: 100;
+        z-index: 360;
         padding: 20px;
       }
 
@@ -17511,7 +17561,7 @@
     </script>
   </head>
 
-  <body data-av-dashboard="1">
+  <body data-av-dashboard="1" class="notranslate" translate="no">
     <nav class="sidebar">
       <div class="sidebar-logo">
         <div class="logo-lockup">
@@ -24562,7 +24612,7 @@
                 <div class="psl"><span id="psPlanDueLbl">Next charge</span><span id="psPlanDueVal"><span class="ps-val-skel sm sk-bar" style="width:88px"></span></span></div>
                 <div class="psl"><span>Includes</span><span id="psPlanFeatVal"><span class="ps-val-skel sm sk-bar" style="width:120px"></span></span></div>
               </div>
-              <button class="ps-btn primary" onclick="openUpgradePlan()">
+              <button class="ps-btn primary" id="psUpgradeBtn" onclick="openUpgradePlan()">
                 Upgrade plan
               </button>
             </div>
@@ -33926,6 +33976,7 @@
         const tp = document.getElementById("avTitlePop"); if (tp) tp.classList.add("show");
       }
       function openAddVeh(manual) {
+        if (window.AVBilling && AVBilling.blockWriteIfTrialEnded()) return;
         editingVehicleVin = null;
         const m = document.getElementById("addVehModal");
         if (!m) return;
@@ -34051,6 +34102,7 @@
         prevSoldSave();
       }
       function openPrevSold(manual) {
+        if (window.AVBilling && AVBilling.blockWriteIfTrialEnded()) return;
         const m = document.getElementById("prevSoldModal");
         if (!m) return;
         try {
@@ -36177,6 +36229,7 @@
       }
 
       function addVehicleSave() {
+        if (window.AVBilling && AVBilling.blockWriteIfTrialEnded()) return;
         const vin = (document.getElementById("avVin").value || "")
           .trim()
           .toUpperCase();
@@ -40668,6 +40721,15 @@
             (data.dealership && data.dealership.name) ||
             crmOwner.dealershipName ||
             null,
+          trialEndsAt:
+            data.trialEndsAt != null ? data.trialEndsAt : crmOwner.trialEndsAt || null,
+          trialDaysLeft:
+            data.trialDaysLeft != null ? data.trialDaysLeft : crmOwner.trialDaysLeft,
+          inTrial: data.inTrial != null ? !!data.inTrial : !!crmOwner.inTrial,
+          billingRequired:
+            data.billingRequired != null
+              ? !!data.billingRequired
+              : !!crmOwner.billingRequired,
         };
         crmOwner = next;
         window.crmOwner = next;
@@ -40709,8 +40771,24 @@
             (typeof u.dealership === "string" ? u.dealership : null) ||
             (u.dealership && u.dealership.name) ||
             null,
+          trialEndsAt: u.trialEndsAt || null,
+          trialDaysLeft: u.trialDaysLeft,
+          inTrial: !!u.inTrial,
+          billingRequired: !!u.billingRequired,
         });
         if (typeof updateDashWelcome === "function") updateDashWelcome();
+        try {
+          if (window.AVBilling && typeof AVBilling.applyTrialHint === "function") {
+            AVBilling.applyTrialHint({
+              inTrial: !!u.inTrial,
+              billingRequired: !!u.billingRequired,
+              trialDaysLeft: u.trialDaysLeft,
+              trialEndsAt: u.trialEndsAt,
+              subscribed: !!u.subscribed,
+              phase: u.phase || null,
+            });
+          }
+        } catch (e) {}
       }
       function hydrateProfileFromApi() {
         if (!window.AVApi || typeof AVApi.me !== "function") {
@@ -48470,6 +48548,7 @@
       }
 
       function openExpenseModal(id) {
+        if (window.AVBilling && AVBilling.blockWriteIfTrialEnded()) return;
         const isEdit = !!id;
         document.getElementById("expModalTitle").textContent = isEdit
           ? "Edit Expense"
@@ -49090,6 +49169,34 @@
       // ================= JENNA AI ASSISTANT =================
       let jennaOpen = false,
         jennaWelcomed = false;
+      function jennaTrialLocked() {
+        return !!(
+          window.AVBilling &&
+          typeof AVBilling.isTrialWriteBlocked === "function" &&
+          AVBilling.isTrialWriteBlocked()
+        );
+      }
+      function applyJennaTrialLock() {
+        var locked = jennaTrialLocked();
+        var inp = document.getElementById("jennaInput");
+        var send = document.getElementById("jennaSendBtn");
+        var scan = document.querySelector("#jennaPanel .jenna-scan-mini");
+        var chips = document.getElementById("jennaChips");
+        if (inp) {
+          inp.disabled = locked;
+          inp.placeholder = locked
+            ? "Jenna is paused until you subscribe."
+            : "Ask Jenna anything...";
+        }
+        if (send) send.disabled = locked;
+        if (scan) {
+          scan.disabled = locked;
+          scan.style.pointerEvents = locked ? "none" : "";
+          scan.style.opacity = locked ? "0.4" : "";
+        }
+        if (chips) chips.style.display = locked ? "none" : "";
+      }
+      window.applyJennaTrialLock = applyJennaTrialLock;
       function toggleJenna() {
         jennaOpen = !jennaOpen;
         document
@@ -49099,6 +49206,19 @@
         document.getElementById("jennaFab").style.display = jennaOpen
           ? "none"
           : "flex";
+        applyJennaTrialLock();
+        if (jennaOpen && jennaTrialLocked()) {
+          if (!document.getElementById("jennaTrialLockNote")) {
+            var note = document.createElement("div");
+            note.className = "jenna-msg bot";
+            note.id = "jennaTrialLockNote";
+            note.textContent =
+              "Your trial has ended. Add a payment method to keep using Jenna.";
+            var body = document.getElementById("jennaBody");
+            if (body) body.appendChild(note);
+          }
+          return;
+        }
         if (jennaOpen && !jennaWelcomed) {
           jennaWelcomed = true;
           jennaBot(
@@ -49227,6 +49347,10 @@
         if (t) t.remove();
       }
       function jennaSend() {
+        if (jennaTrialLocked()) {
+          applyJennaTrialLock();
+          return;
+        }
         if (jennaBusy) return;
         const inp = document.getElementById("jennaInput");
         const q = inp.value.trim();
@@ -49255,7 +49379,7 @@
         var chips = document.querySelector("#jennaPanel .jenna-chips");
         // Keep input editable so the user can draft the next question;
         // send / Enter / chips stay blocked until the current reply finishes.
-        if (inp) {
+        if (inp && !jennaTrialLocked()) {
           inp.disabled = false;
           inp.placeholder = "Ask Jenna anything...";
         }
@@ -49264,6 +49388,7 @@
           stop.style.display = jennaBusy ? "flex" : "none";
         }
         if (chips) chips.classList.toggle("is-busy", jennaBusy);
+        if (jennaTrialLocked()) applyJennaTrialLock();
       }
 
       function jennaAbort() {
@@ -49338,6 +49463,7 @@
       }
 
       function jennaRunAction(action) {
+        if (jennaTrialLocked()) return;
         if (!action || !action.type) return;
         try {
           if (action.type === "navigate" && action.page) jennaNav(action.page);
@@ -49348,6 +49474,11 @@
       }
 
       function jennaAsk(q) {
+        if (jennaTrialLocked()) {
+          if (!jennaOpen) toggleJenna();
+          else applyJennaTrialLock();
+          return;
+        }
         q = String(q || "").trim();
         if (!q) return;
         if (jennaBusy) return;
@@ -49385,6 +49516,13 @@
                 );
                 return;
               }
+              if (err && err.code === "BILLING_REQUIRED") {
+                applyJennaTrialLock();
+                jennaBot(
+                  "Your trial has ended. Add a payment method to keep using Jenna.",
+                );
+                return;
+              }
               const local = jennaRespond(q);
               const reason =
                 (err && err.message) || "AI service unavailable";
@@ -49396,7 +49534,7 @@
                     .slice(0, 120) +
                   ")</span>",
               );
-              if (local.action) local.action();
+              if (local.action && !jennaTrialLocked()) local.action();
             })
             .finally(function () {
               jennaAbortController = null;
@@ -49407,7 +49545,7 @@
             jennaStopTyping();
             const r = jennaRespond(q);
             jennaBot(r.text);
-            if (r.action) r.action();
+            if (r.action && !jennaTrialLocked()) r.action();
             setJennaBusy(false);
           }, 500);
         }
@@ -51315,6 +51453,7 @@
       }
 
       function openScanModal(target) {
+        if (window.AVBilling && AVBilling.blockWriteIfTrialEnded()) return;
         if (scanSaving) return;
         scanTarget = target || null;
         scanCleaned = null;
@@ -51914,6 +52053,7 @@
       }
 
       function openMarkSold() {
+        if (window.AVBilling && AVBilling.blockWriteIfTrialEnded()) return;
         document.getElementById("msSearch").value = "";
         renderMarkSoldList();
         document.getElementById("markSoldModal").classList.add("open");
@@ -59425,11 +59565,13 @@
           typeof avT === "function" ? avT("Welcome back, ") : "Welcome back, ";
         if (el) el.textContent = name;
         if (wrap) {
-          if (wrap.firstChild && wrap.firstChild.nodeType === 3) {
-            wrap.firstChild.nodeValue = prefix;
-          } else if (el) {
-            wrap.insertBefore(document.createTextNode(prefix), el);
+          var node = wrap.firstChild;
+          while (node && node !== el) {
+            var next = node.nextSibling;
+            if (node.nodeType === 3) wrap.removeChild(node);
+            node = next;
           }
+          wrap.insertBefore(document.createTextNode(prefix), el);
         }
       }
 

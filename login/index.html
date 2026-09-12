@@ -2007,6 +2007,7 @@
             refreshToken: data.refreshToken,
             portal: userPortal,
           });
+          try { localStorage.removeItem("av_trial_banner_dismissed"); } catch (e) {}
         } else {
           if(userPortal === 'owner') localStorage.setItem('avOwnerToken', data.token || data.accessToken);
           else localStorage.setItem('avAuthToken', data.token || data.accessToken);

@@ -8,7 +8,9 @@
     history: [],
     plans: [],
     loading: false,
+    billingReady: false,
   };
+  var trialHint = null;
   var _renderToken = 0;
   var PS_SUMMARY_PANELS = [
     "psPlanCard",
@@ -51,6 +53,45 @@
 
   function t(s) {
     return typeof global.avT === "function" ? global.avT(s) : s;
+  }
+
+  function billingPhase(b) {
+    if (!b) return "unsubscribed";
+    if (b.phase) return b.phase;
+    if (b.subscribed) return b.pastDue ? "past_due" : "subscribed";
+    if (b.billingRequired) return "trial_ended";
+    if (b.inTrial) return (b.trialDaysLeft || 0) <= 3 ? "trial_ending" : "trial";
+    return "unsubscribed";
+  }
+
+  function isPaidPhase(phase) {
+    return phase === "subscribed" || phase === "past_due";
+  }
+
+  function listPrice(b) {
+    return Number(b && (b.amount != null ? b.amount : b.monthlyFee)) || 99.99;
+  }
+
+  function bindSubscribe(id) {
+    var el = document.getElementById(id);
+    if (el) el.onclick = function () { startSubscriptionCheckout(); };
+  }
+
+  function setUpgradeAction(phase) {
+    var btn = document.getElementById("psUpgradeBtn");
+    if (!btn) return;
+    if (isPaidPhase(phase)) {
+      btn.textContent = t("Upgrade plan");
+      btn.onclick = function () {
+        if (typeof global.openUpgradePlan === "function") global.openUpgradePlan();
+      };
+      btn.style.display = "";
+      return;
+    }
+    btn.textContent =
+      phase === "trial_ended" ? t("Add payment method") : t("Subscribe now");
+    btn.onclick = function () { startSubscriptionCheckout(); };
+    btn.style.display = "";
   }
 
   function setText(id, text) {
@@ -176,21 +217,88 @@
     setPanelLoading("psHistoryCard", true);
   }
 
+  function startSubscriptionCheckout() {
+    if (!global.AVApi) return Promise.reject(new Error("API unavailable"));
+    var plan =
+      (state.billing && state.billing.plan) || "growing_dealership";
+    var p = AVApi.billingCheckout({
+      action: "start_subscription",
+      plan: plan,
+    });
+    return (
+      typeof AVToast !== "undefined" && AVToast.promise
+        ? AVToast.promise(p, {
+            loading: "Starting checkout…",
+            loadingMsg: "Redirecting to Stripe",
+            success: "Redirecting…",
+            error: "Unable to start checkout",
+          })
+        : p
+    ).then(function (res) {
+      if (res && res.url) window.location.href = res.url;
+      else throw new Error("No checkout URL returned");
+    });
+  }
+
   function paintAlert(b) {
     var alert = document.getElementById("psAlert");
     if (!alert) return;
-    if (b.linked === false) {
-      alert.className = "ps-alert due";
-      setTextT("psAlertTitle", "Billing not linked");
+    var phase = billingPhase(b);
+    var ends = fmtDateSafe(b.trialEndsAt || b.dueDate);
+    var price = listPrice(b);
+
+    if (phase === "trial" || phase === "trial_ending") {
+      alert.className = "ps-alert " + (phase === "trial_ending" ? "due" : "ok");
+      setText(
+        "psAlertTitle",
+        phase === "trial_ending"
+          ? t("Trial ending soon — ") +
+            (b.trialDaysLeft === 1
+              ? t("1 day left")
+              : (b.trialDaysLeft || 0) + " " + t("days left"))
+          : t("Free trial — ") +
+            (b.trialDaysLeft === 1
+              ? t("1 day left")
+              : (b.trialDaysLeft || 0) + " " + t("days left")),
+      );
       setText(
         "psAlertSub",
-        b.message || t("Contact support to connect Stripe."),
+        t("You have not been charged. No card on file.") +
+          " " +
+          t("Trial ends") +
+          " " +
+          ends +
+          ". " +
+          t("Then $99.99/mo if you subscribe."),
       );
-      setHtml("psAlertAction", "");
+      setHtml(
+        "psAlertAction",
+        '<button class="ps-btn" type="button" id="psStartSubBtn">' +
+          t("Subscribe now") +
+          "</button>",
+      );
+      bindSubscribe("psStartSubBtn");
       return;
     }
-    var due = !!b.pastDue;
-    var price = Number(b.amount != null ? b.amount : b.monthlyFee) || 0;
+
+    if (phase === "trial_ended" || phase === "unsubscribed") {
+      alert.className = "ps-alert due";
+      setTextT("psAlertTitle", "Your free trial has ended");
+      setText(
+        "psAlertSub",
+        t("Please add a payment method to subscribe at $99.99/mo and keep using AutoVault."),
+      );
+      setHtml(
+        "psAlertAction",
+        '<button class="ps-btn danger" type="button" id="psStartSubBtn">' +
+          t("Add payment method") +
+          "</button>",
+      );
+      bindSubscribe("psStartSubBtn");
+      return;
+    }
+
+    var due = phase === "past_due";
     alert.className = "ps-alert " + (due ? "due" : "ok");
     if (due) {
       setText(
@@ -218,44 +326,48 @@
           t("Make payment") +
           "</button>",
       );
-    } else {
-      setTextT("psAlertTitle", "Your account is up to date");
-      setText(
-        "psAlertSub",
-        t("Next charge of ") +
-          psFmt(price) +
-          t(" on ") +
-          fmtDateSafe(b.dueDate) +
-          ".",
-      );
-      setHtml("psAlertAction", "");
+      return;
     }
+    setTextT("psAlertTitle", "Your account is up to date");
+    setText(
+      "psAlertSub",
+      t("Next charge of ") + psFmt(price) + t(" on ") + fmtDateSafe(b.dueDate) + ".",
+    );
+    setHtml("psAlertAction", "");
   }
 
   function paintPlan(b) {
-    if (b.linked === false) {
-      setText("psPlanName", b.planLabel || b.plan || "—");
-      setText("psPlanPrice", "—");
-      setText("psPlanCycle", "");
-      var bd0 = document.getElementById("psPlanBadge");
-      if (bd0) {
-        bd0.textContent = t("Unlinked");
-        bd0.className = "ps-badge due";
+    var phase = billingPhase(b);
+    var price = listPrice(b);
+    var planLabel = b.planLabel || b.plan || "Fully Loaded";
+    var bd = document.getElementById("psPlanBadge");
+    setText("psPlanName", planLabel);
+    setText("psPlanFeatVal", b.planFeat || t("Every module included"));
+    setUpgradeAction(phase);
+
+    if (!isPaidPhase(phase)) {
+      setText("psPlanPrice", t("Free"));
+      setText("psPlanCycle", t("then $99.99/mo"));
+      if (bd) {
+        bd.textContent =
+          phase === "trial_ended" ? t("Trial ended") : t("Free trial");
+        bd.className = "ps-badge " + (phase === "trial_ended" ? "due" : "ok");
       }
-      setText("psPlanCycleVal", "—");
-      setTextT("psPlanDueLbl", "Status");
-      setTextT("psPlanDueVal", "Billing not linked");
-      setText("psPlanFeatVal", "—");
+      setText("psPlanCycleVal", t("Not billed yet"));
+      setTextT("psPlanDueLbl", phase === "trial_ended" ? "Status" : "Trial ends");
+      setText(
+        "psPlanDueVal",
+        phase === "trial_ended"
+          ? t("Add a payment method")
+          : fmtDateSafe(b.trialEndsAt || b.dueDate),
+      );
       return;
     }
-    var due = !!b.pastDue;
-    var price = Number(b.amount != null ? b.amount : b.monthlyFee) || 0;
+
+    var due = phase === "past_due";
     var cycle = b.cycle || "Monthly";
-    var planLabel = b.planLabel || b.plan || "—";
-    setText("psPlanName", planLabel);
     setText("psPlanPrice", psFmt(price));
     setText("psPlanCycle", "/ " + String(t(cycle)).toLowerCase());
-    var bd = document.getElementById("psPlanBadge");
     if (bd) {
       bd.textContent = due ? t("Past due") : t("Active");
       bd.className = "ps-badge " + (due ? "due" : "active");
@@ -263,7 +375,6 @@
     setText("psPlanCycleVal", t(cycle));
     setTextT("psPlanDueLbl", due ? "Past due since" : "Next charge");
     setText("psPlanDueVal", fmtDateSafe(b.dueDate));
-    setText("psPlanFeatVal", b.planFeat || "—");
   }
 
   function cardBrandKey(brand) {
@@ -409,15 +520,18 @@
   }
 
   function paintMethod(b) {
-    if (b.linked === false) {
+    var phase = billingPhase(b);
+    if (!isPaidPhase(phase)) {
       setHtml(
         "psMethod",
         '<div style="color:var(--muted);font-size:13px;">' +
-          t("Connect billing to manage your payment method.") +
+          (phase === "trial_ended"
+            ? t("No payment method on file. Subscribe at $99.99/mo to continue.")
+            : t("No card on file. You will not be charged during the free trial.")) +
           "</div>",
       );
       setText("psAmountDueVal", "—");
-      setText("psExpenseLogVal", "—");
+      setText("psExpenseLogVal", t("Off"));
       var pb0 = document.getElementById("psPayBtn");
       if (pb0) {
         pb0.disabled = true;
@@ -445,11 +559,12 @@
   }
 
   function paintSettingsToggles(b) {
+    var paid = isPaidPhase(billingPhase(b));
     var planLabel = (b && (b.planLabel || b.plan)) || "AutoVault";
     var tg = document.getElementById("psAutoExpense");
     if (tg) {
-      tg.disabled = false;
-      tg.checked = !!(b && b.autoExpense);
+      tg.disabled = !paid;
+      tg.checked = !!(paid && b && b.autoExpense);
     }
     var st = document.getElementById("psAutoStatus");
     if (st) {
@@ -523,8 +638,13 @@
 
   function paintSummary(b) {
     if (!b) return;
-    if (b.linked === false) {
-      setText("psSub", t("— billing not linked"));
+    if (!isPaidPhase(billingPhase(b))) {
+      setText(
+        "psSub",
+        b.inTrial
+          ? t("— free trial, no card on file")
+          : t("— add a payment method to continue"),
+      );
     } else {
       var price = Number(b.amount != null ? b.amount : b.monthlyFee) || 0;
       var cycle = b.cycle || "Monthly";
@@ -552,9 +672,16 @@
 
   async function loadBillingSummary() {
     if (!global.AVApi) throw new Error("API not loaded");
-    var billingRes = await AVApi.getBilling();
-    state.billing = billingRes.billing || billingRes;
-    return state.billing;
+    try {
+      var billingRes = await AVApi.getBilling();
+      state.billing = billingRes.billing || billingRes;
+      try {
+        syncTrialBanner(state.billing);
+      } catch (_) {}
+      return state.billing;
+    } finally {
+      state.billingReady = true;
+    }
   }
 
   async function loadBillingHistory() {
@@ -991,10 +1118,263 @@
     }
   }
 
+  var BANNER_DISMISS_KEY = "av_trial_banner_dismissed";
+
+  function isTrialBannerDismissed() {
+    try {
+      return localStorage.getItem(BANNER_DISMISS_KEY) === "1";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function hideTrialBannerBar() {
+    var old = document.getElementById("avTrialBanner");
+    if (old) old.remove();
+    document.body.classList.remove("has-trial-banner");
+  }
+
+  function dismissTrialBanner() {
+    try {
+      localStorage.setItem(BANNER_DISMISS_KEY, "1");
+    } catch (_) {}
+    hideTrialBannerBar();
+  }
+
+  function resetTrialBannerDismissed() {
+    try {
+      localStorage.removeItem(BANNER_DISMISS_KEY);
+    } catch (_) {}
+  }
+
+  function syncTrialBanner(b) {
+    try {
+      if (typeof global.applyJennaTrialLock === "function") {
+        global.applyJennaTrialLock();
+      }
+    } catch (_) {}
+    if (!b || (!b.inTrial && !b.billingRequired)) {
+      hideTrialBannerBar();
+      var wall = document.getElementById("avTrialPaywall");
+      if (wall && (!b || !b.billingRequired)) wall.remove();
+      return;
+    }
+    var phase = billingPhase(b);
+    var locked = phase === "trial_ending" || phase === "trial_ended";
+    if (!locked && isTrialBannerDismissed()) {
+      hideTrialBannerBar();
+    } else {
+    var bar = document.getElementById("avTrialBanner");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "avTrialBanner";
+      bar.setAttribute("role", "status");
+      bar.setAttribute("data-no-i18n", "1");
+      bar.setAttribute("translate", "no");
+      bar.className = "notranslate";
+      document.body.insertBefore(bar, document.body.firstChild);
+    }
+    document.body.classList.add("has-trial-banner");
+    var closeBtn = locked
+      ? ""
+      : ' <button type="button" id="avTrialBannerClose" aria-label="Dismiss">&times;</button>';
+    if (b.inTrial) {
+      var days = b.trialDaysLeft || 0;
+      var urgent = days <= 5;
+      bar.style.background = urgent ? "#B45309" : "#2743E8";
+      bar.innerHTML =
+        (days === 1
+          ? t("1 day left in your free trial.")
+          : days + " " + t("days left in your free trial.")) +
+        ' <button type="button" id="avTrialBannerBtn" style="border:0;border-radius:8px;padding:6px 10px;font:inherit;font-weight:700;cursor:pointer;background:#fff;color:#111;">' +
+        t("Subscribe") +
+        "</button>" +
+        closeBtn;
+    } else {
+      bar.style.background = "#B91C1C";
+      bar.innerHTML =
+        t("Your trial has ended. Please add a payment method to continue.") +
+        ' <button type="button" id="avTrialBannerBtn" style="border:0;border-radius:8px;padding:6px 10px;font:inherit;font-weight:700;cursor:pointer;background:#fff;color:#111;">' +
+        t("Pay now") +
+        "</button>" +
+        closeBtn;
+    }
+    var btn = document.getElementById("avTrialBannerBtn");
+    if (btn) {
+      btn.onclick = function () {
+        if (typeof global.showPage === "function") {
+          var nav = document.querySelector('[data-page="payment-settings"]');
+          global.showPage("payment-settings", nav);
+        } else {
+          window.location.hash = "payment-settings";
+        }
+      };
+    }
+    var close = document.getElementById("avTrialBannerClose");
+    if (close) {
+      close.onclick = function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        dismissTrialBanner();
+      };
+    }
+    }
+
+    if (b.billingRequired) {
+      var onBilling =
+        (window.location.hash || "").indexOf("payment-settings") >= 0;
+      var overlay = document.getElementById("avTrialPaywall");
+      if (onBilling) {
+        if (overlay) overlay.remove();
+        return;
+      }
+      if (!overlay) {
+        overlay = document.createElement("div");
+        overlay.id = "avTrialPaywall";
+        overlay.style.cssText =
+          "position:fixed;inset:0;z-index:200;background:rgba(10,13,16,.72);display:flex;align-items:center;justify-content:center;padding:24px;";
+        overlay.innerHTML =
+          '<div style="max-width:420px;background:var(--panel,#fff);color:var(--text,#111);border-radius:16px;padding:28px 24px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.25);">' +
+          "<h2 style='margin:0 0 8px;font-size:22px;'>" +
+          t("Your free trial has ended") +
+          "</h2><p style='margin:0 0 18px;line-height:1.5;color:var(--muted,#555);'>" +
+          t("Please add a payment method and subscribe to restore full access.") +
+          "</p><button type='button' id='avTrialPaywallBtn' class='btn btn-primary' style='min-width:180px;'>" +
+          t("Add payment method") +
+          "</button></div>";
+        document.body.appendChild(overlay);
+        var pay = document.getElementById("avTrialPaywallBtn");
+        if (pay) {
+          pay.onclick = function () {
+            startSubscriptionCheckout().catch(function () {
+              if (typeof global.showPage === "function") {
+                var nav = document.querySelector('[data-page="payment-settings"]');
+                global.showPage("payment-settings", nav);
+              }
+            });
+          };
+        }
+      }
+    }
+  }
+
+  function applyTrialHint(h) {
+    if (!h) return;
+    trialHint = {
+      inTrial: !!h.inTrial,
+      billingRequired: !!h.billingRequired,
+      trialDaysLeft: h.trialDaysLeft,
+      trialEndsAt: h.trialEndsAt,
+      subscribed: !!h.subscribed,
+      phase: h.phase || null,
+    };
+    if (!state.billing) {
+      state.billing = Object.assign({ linked: false }, trialHint);
+    }
+    try {
+      if (typeof global.applyJennaTrialLock === "function") {
+        global.applyJennaTrialLock();
+      }
+    } catch (_) {}
+  }
+
+  function ownerTrial() {
+    try {
+      return global.crmOwner || {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function isKnownTrialEnded() {
+    var b = state.billing || trialHint || {};
+    var o = ownerTrial();
+    return !!(
+      b.billingRequired ||
+      o.billingRequired ||
+      billingPhase(b) === "trial_ended"
+    );
+  }
+
+  function isTrialWriteBlocked() {
+    var b = state.billing || trialHint || {};
+    var o = ownerTrial();
+    if (b.subscribed || o.subscribed) return false;
+    if (isKnownTrialEnded()) return true;
+    if (b.inTrial || o.inTrial) return false;
+    if (!state.billingReady) return true;
+    return false;
+  }
+
+  function goToPaymentSettings() {
+    if (typeof global.showPage === "function") {
+      var nav = document.querySelector('[data-page="payment-settings"]');
+      global.showPage("payment-settings", nav);
+    } else {
+      window.location.hash = "payment-settings";
+    }
+  }
+
+  function blockWriteIfTrialEnded() {
+    if (!isTrialWriteBlocked()) return false;
+    if (isKnownTrialEnded()) {
+      if (typeof AVToast !== "undefined" && AVToast.error) {
+        AVToast.error(t("Add a payment method to continue."), t("Trial ended"));
+      }
+      goToPaymentSettings();
+    }
+    return true;
+  }
+
+  var TRIAL_MODAL_ALLOW = {
+    changePasswordModal: 1,
+    upgradePlanModal: 1,
+    makePaymentModal: 1,
+    updateMethodModal: 1,
+    auditLogModal: 1,
+    salesTaxInfoModal: 1,
+    vehicleDetailModal: 1,
+    flooringDetailModal: 1,
+    filingDetailModal: 1,
+    proofViewModal: 1,
+    welcomeModal: 1,
+    supportModal: 1,
+  };
+
+  function installTrialModalGuard() {
+    if (document.documentElement.dataset.avTrialModalGuard) return;
+    document.documentElement.dataset.avTrialModalGuard = "1";
+    var obs = new MutationObserver(function (muts) {
+      if (!isTrialWriteBlocked()) return;
+      for (var i = 0; i < muts.length; i++) {
+        var el = muts[i].target;
+        if (!el || !el.classList || !el.classList.contains("modal-overlay")) continue;
+        if (!el.classList.contains("open")) continue;
+        if (TRIAL_MODAL_ALLOW[el.id]) continue;
+        el.classList.remove("open");
+        blockWriteIfTrialEnded();
+      }
+    });
+    obs.observe(document.body, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ["class"],
+    });
+  }
+
+  if (document.body) installTrialModalGuard();
+  else document.addEventListener("DOMContentLoaded", installTrialModalGuard);
+
   global.AVBilling = {
     loadBilling: loadBilling,
     renderPaymentSettings: renderPaymentSettings,
     handleBillingReturn: handleBillingReturn,
+    startSubscriptionCheckout: startSubscriptionCheckout,
+    syncTrialBanner: syncTrialBanner,
+    resetTrialBannerDismissed: resetTrialBannerDismissed,
+    isTrialWriteBlocked: isTrialWriteBlocked,
+    blockWriteIfTrialEnded: blockWriteIfTrialEnded,
+    applyTrialHint: applyTrialHint,
     state: state,
   };
 

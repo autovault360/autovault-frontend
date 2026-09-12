@@ -58,7 +58,7 @@
 
         <span class="af-eyebrow" id="eyebrow" hidden>Account Created</span>
         <h1 class="af-title" id="title">Finishing setup…</h1>
-        <p class="af-sub" id="desc">We're confirming your account. This only takes a moment.</p>
+        <p class="af-sub" id="desc">We're setting up your 25-day free trial. This only takes a moment.</p>
         <p class="af-sub af-expiry-wrap" id="confirmExpiryWrap" hidden><strong id="confirmExpiry" class="af-expiry"></strong></p>
 
         <div class="af-email-box" id="emailBox" hidden>
@@ -191,7 +191,7 @@
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) {
           throw new Error(
-            data.message || data.error?.message || "Unable to verify purchase.",
+            data.message || data.error?.message || "Unable to finish signup.",
           );
         }
 
@@ -211,7 +211,7 @@
           return;
         }
         showError(
-          "Could not verify purchase",
+          "Could not finish signup",
           msg || "Your confirmation link is invalid or expired. Please contact support.",
         );
       }

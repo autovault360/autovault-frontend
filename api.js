@@ -337,6 +337,15 @@
           window.openChangePassword(true);
         }
       }
+      if (resp.status === 403 && code === "BILLING_REQUIRED") {
+        try {
+          if (window.AVBilling && typeof window.AVBilling.syncTrialBanner === "function") {
+            window.AVBilling.syncTrialBanner(
+              Object.assign({ billingRequired: true }, data.error?.details || {}),
+            );
+          }
+        } catch (_) {}
+      }
       const err = new Error(
         data.error?.message || data.message || `Request failed (${resp.status})`,
       );
