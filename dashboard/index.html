@@ -54180,18 +54180,23 @@
 
         // Financial fields only after sold/jacket exists (mock parity; never mark sold via autosave)
         if (v.sold || v.dealSaved || v.hasDealJacket || v.dealJacket) {
-          const sp = parseFloat(g("djSoldPrice"));
+          const readPatchMoney = function (id) {
+            const raw = (g(id) || "").trim();
+            if (raw === "") return 0;
+            return parseFloat(raw);
+          };
+          const sp = readPatchMoney("djSoldPrice");
           if (!isNaN(sp) && sp >= 0) {
             patch.soldPrice = sp;
             v.soldPrice = sp;
           }
-          const tx = parseFloat(g("djStateTax"));
+          const tx = readPatchMoney("djStateTax");
           if (!isNaN(tx) && tx >= 0) {
             patch.salesTaxAmount = tx;
             v.customerSalesTax = tx;
             v.salesTax = tx;
           }
-          const rf = parseFloat(g("djRegFee"));
+          const rf = readPatchMoney("djRegFee");
           if (!isNaN(rf) && rf >= 0) {
             patch.licenseFees = rf;
             v.customerRegFees = rf;
@@ -54215,7 +54220,7 @@
           }
 
           if (djCommMode === "amt") {
-            const ca = parseFloat(g("djCommAmt"));
+            const ca = readPatchMoney("djCommAmt");
             if (!isNaN(ca) && ca >= 0) {
               const repName = g("djRep") || v.rep;
               const repObj = (salesReps || []).find((x) => x.name === repName);
