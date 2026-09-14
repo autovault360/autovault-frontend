@@ -217,15 +217,19 @@
     setPanelLoading("psHistoryCard", true);
   }
 
+  var _billingBusy = false;
+
   function startSubscriptionCheckout() {
     if (!global.AVApi) return Promise.reject(new Error("API unavailable"));
+    if (_billingBusy) return Promise.resolve(null);
+    _billingBusy = true;
     var plan =
       (state.billing && state.billing.plan) || "growing_dealership";
     var p = AVApi.billingCheckout({
       action: "start_subscription",
       plan: plan,
     });
-    return (
+    var chain = (
       typeof AVToast !== "undefined" && AVToast.promise
         ? AVToast.promise(p, {
             loading: "Starting checkout…",
@@ -237,6 +241,9 @@
     ).then(function (res) {
       if (res && res.url) window.location.href = res.url;
       else throw new Error("No checkout URL returned");
+    });
+    return chain.finally(function () {
+      _billingBusy = false;
     });
   }
 
@@ -895,6 +902,8 @@
 
   async function selectBillingPlan(slug) {
     if (!global.AVApi) return;
+    if (_billingBusy) return;
+    _billingBusy = true;
     closeUpgradePlan();
     try {
       var p = AVApi.billingCheckout({ action: "upgrade", plan: slug });
@@ -911,6 +920,8 @@
       else throw new Error("No checkout URL returned");
     } catch (err) {
       /* toast already shown */
+    } finally {
+      _billingBusy = false;
     }
   }
 
@@ -938,6 +949,8 @@
 
   async function confirmUpdateMethod() {
     if (!global.AVApi) return;
+    if (_billingBusy) return;
+    _billingBusy = true;
     try {
       var p = AVApi.billingPortal();
       var res =
@@ -953,6 +966,8 @@
       else throw new Error("No portal URL returned");
     } catch (err) {
       /* toast already shown */
+    } finally {
+      _billingBusy = false;
     }
   }
 
@@ -1003,11 +1018,13 @@
 
   async function confirmPayment() {
     if (!global.AVApi) return;
+    if (_billingBusy) return;
     var b = state.billing || {};
     if (!b.pastDue) {
       closeMakePayment();
       return;
     }
+    _billingBusy = true;
     try {
       var p = AVApi.billingCheckout({ action: "pay_due" });
       var res =
@@ -1023,6 +1040,8 @@
       else throw new Error("No payment URL returned");
     } catch (err) {
       /* toast already shown */
+    } finally {
+      _billingBusy = false;
     }
   }
 
