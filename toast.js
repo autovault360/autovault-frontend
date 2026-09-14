@@ -35,6 +35,7 @@
   document.head.appendChild(style);
 
   var wrap;
+  var _liveByKey = {};
   function getWrap() {
     if (!wrap) {
       wrap = document.createElement("div");
@@ -46,6 +47,9 @@
 
   function dismissToast(node, delay) {
     function remove() {
+      if (node.__avKey != null && _liveByKey[node.__avKey] === node) {
+        delete _liveByKey[node.__avKey];
+      }
       node.classList.remove("show");
       setTimeout(function () {
         if (node.parentNode) node.parentNode.removeChild(node);
@@ -67,8 +71,17 @@
     var message = tr(opts.message || "");
     var duration = Number(opts.duration || 3800);
 
+    var key = type + "\u0001" + title + "\u0001" + message;
+    var prev = _liveByKey[key];
+    if (prev) {
+      if (prev.parentNode) prev.parentNode.removeChild(prev);
+      delete _liveByKey[key];
+    }
+
     var node = document.createElement("div");
     node.className = "av-toast av-" + type;
+    node.__avKey = key;
+    _liveByKey[key] = node;
     node.innerHTML =
       '<span class="av-toast-icon"></span>' +
       '<div><div class="av-toast-title"></div><div class="av-toast-msg"></div></div>' +

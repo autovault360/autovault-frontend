@@ -33299,6 +33299,7 @@
         if (m) m.classList.remove("open");
       }
       async function saveLead() {
+        if (typeof AVBusy !== "undefined" && !AVBusy.guard()) return;
         const name = document.getElementById("leadName").value.trim();
         if (!name) {
           document.getElementById("leadName").focus();
@@ -33328,6 +33329,7 @@
         };
         const useLive = window.AVCustomers && window.AVApi;
         try {
+          if (typeof AVBusy !== "undefined") AVBusy.inc();
           if (useLive) {
             if (typeof AVToast !== "undefined")
               AVToast.info(
@@ -33362,12 +33364,16 @@
           console.error("[rep-lead-save]", err);
           if (typeof AVToast !== "undefined")
             AVToast.error(err.message || "Failed to save lead");
+        } finally {
+          if (typeof AVBusy !== "undefined") AVBusy.dec();
         }
       }
       async function deleteLead() {
         if (!editingLead) return;
+        if (typeof AVBusy !== "undefined" && !AVBusy.guard()) return;
         const useLive = window.AVCustomers && window.AVApi;
         try {
+          if (typeof AVBusy !== "undefined") AVBusy.inc();
           if (useLive) {
             if (typeof AVToast !== "undefined")
               AVToast.info("Deleting lead\u2026");
@@ -33381,6 +33387,8 @@
           console.error("[rep-lead-delete]", err);
           if (typeof AVToast !== "undefined")
             AVToast.error(err.message || "Failed to delete lead");
+        } finally {
+          if (typeof AVBusy !== "undefined") AVBusy.dec();
         }
       }
       async function renderRepLeads() {
@@ -38120,14 +38128,16 @@
         };
         try {
           if (!window.AVWholesale) throw new Error("Wholesale API unavailable");
+          var toastShown = false;
           var p = AVWholesale.createExpense(payload);
-          if (typeof AVToast !== "undefined" && AVToast.promise)
+          if (typeof AVToast !== "undefined" && AVToast.promise) {
+            toastShown = true;
             await AVToast.promise(p, {
               loading: "Saving expense\u2026",
               success: "Expense saved",
               error: "Failed to save expense",
             });
-          else await p;
+          } else await p;
           await AVWholesale.loadExpenses({
             mode: wsExpMode,
             year: wsExpYear,
@@ -38135,7 +38145,8 @@
           });
           renderWsExpenses();
         } catch (err) {
-          if (typeof AVToast !== "undefined")
+          console.error("[ws-add-expense]", err);
+          if (!toastShown && typeof AVToast !== "undefined")
             AVToast.error((err && err.message) || "Failed to save expense");
         }
       }
