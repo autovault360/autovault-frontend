@@ -153,15 +153,16 @@
   /* ============ NAV ============ */
   header{position:fixed;top:0;left:0;right:0;width:100%;z-index:100;background:rgba(230,232,239,.72);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid var(--line-soft);transition:background .25s,border-color .25s}
   header.scrolled{background:rgba(255,255,255,.82);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid var(--line-soft)}
-  .nav{display:flex;align-items:center;gap:22px;height:70px;min-width:0}
+  .nav{display:flex;align-items:center;gap:18px;height:70px;min-width:0}
+  header .wrap.nav{max-width:1280px}
   .brand{display:flex;align-items:center;gap:11px;font-family:var(--ff-display);font-weight:700;font-size:19px;letter-spacing:-.01em;flex:0 0 auto;min-width:0}
   .nav .brand{z-index:2}
   .brand .mark{height:30px;width:auto;flex:0 0 auto;display:block}
   .brand .mark img{height:100%;width:auto;display:block}
   .foot .brand .mark{height:34px}
-  .nav-links{display:contents}
-  .nav-primary{display:flex;align-items:center;gap:22px;flex-wrap:nowrap;min-width:0}
-  .nav-end{display:flex;align-items:center;gap:12px;margin-left:auto;flex:0 0 auto;z-index:2}
+  .nav-links{display:flex;align-items:center;gap:16px;flex:1 1 auto;min-width:0}
+  .nav-primary{display:flex;align-items:center;gap:18px;flex-wrap:nowrap;min-width:0;flex:1 1 auto}
+  .nav-end{display:flex;align-items:center;gap:10px;margin-left:auto;flex:0 0 auto;z-index:2}
   .nav-utils{display:inline-flex;align-items:center;height:38px;padding:3px;gap:2px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.42)}
   .nav-utils .theme-toggle{width:32px;height:32px;border:0;background:transparent;border-radius:999px;box-shadow:none}
   .nav-utils .lang-btn{height:32px;padding:0 11px;border:0;border-radius:999px;background:transparent;display:inline-flex;align-items:center;justify-content:center;font-family:var(--ff-mono);font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted);line-height:1}
@@ -1412,9 +1413,16 @@
   .nav-links a.btn-primary{color:#fff}
   .nav-links a.btn-primary:hover{color:#fff}
   body.nav-lock{overflow:hidden}
+  html[lang="es"] .nav{gap:14px}
+  html[lang="es"] .nav-links{gap:12px}
+  html[lang="es"] .nav-primary{gap:12px}
+  html[lang="es"] .nav-primary a{font-size:13.5px}
+  html[lang="es"] .nav-end{gap:8px}
+  html[lang="es"] .nav-utils .lang-btn{letter-spacing:.04em;min-width:4.8em}
+  html[lang="es"] .nav .btn-login{padding:8px 8px}
   @media(max-width:1180px){
     .nav{gap:16px}
-    .nav-primary{gap:16px}
+    .nav-primary{gap:14px}
     .nav-primary a{font-size:13.5px}
     .nav-end{gap:8px}
     .nav-social{padding-left:8px;gap:6px}
@@ -1563,10 +1571,10 @@
     <nav class="nav-links" id="navlinks">
       <div class="nav-primary">
         <a href="#jenna">Jenna</a>
-        <a href="#wholesale">Wholesale</a>
-        <a href="#finance">Profit Tracker</a>
-        <a href="#about">About</a>
-        <a href="/contact">Contact</a>
+        <a href="#wholesale" data-es="Mayoristas">Wholesale</a>
+        <a href="#finance" data-es="Ganancias">Profit Tracker</a>
+        <a href="#about" data-es="Nosotros">About</a>
+        <a href="/contact" data-es="Contacto">Contact</a>
       </div>
       <div class="nav-end">
         <div class="nav-utils">
@@ -1589,8 +1597,8 @@
         </span>
         <div class="nav-actions">
           <span class="nav-guest">
-            <a href="/login" class="btn btn-login">Log In</a>
-            <a href="#waitlist" class="btn btn-primary">Get Started</a>
+            <a href="/login" class="btn btn-login" data-es="Entrar">Log In</a>
+            <a href="#waitlist" class="btn btn-primary" data-es="Comenzar">Get Started</a>
           </span>
           <div class="nav-session" id="navSession">
             <div class="profile-wrap" id="landingProfileWrap">
@@ -3028,9 +3036,14 @@
       });
     }
     function apply(toEs){
-      const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode(n){const p=n.parentElement;if(!p||p.classList.contains("lang-btn")||["SCRIPT","STYLE"].includes(p.tagName))return NodeFilter.FILTER_REJECT;return NodeFilter.FILTER_ACCEPT;}});
+      const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode(n){const p=n.parentElement;if(!p||p.classList.contains("lang-btn")||p.hasAttribute("data-es")||["SCRIPT","STYLE"].includes(p.tagName))return NodeFilter.FILTER_REJECT;return NodeFilter.FILTER_ACCEPT;}});
       const nodes=[];while(w.nextNode())nodes.push(w.currentNode);
       nodes.forEach(n=>{const raw=n.nodeValue;const t=raw.trim();if(!t)return;if(toEs){if(DICT[t]!==undefined){if(n.__en===undefined)n.__en=raw;n.nodeValue=raw.replace(t,DICT[t]);}}else{if(n.__en!==undefined)n.nodeValue=n.__en;}});
+      document.querySelectorAll("[data-es]").forEach(el=>{
+        if(el.classList && el.classList.contains("lang-btn")) return;
+        if(el.__enText===undefined) el.__enText=el.textContent;
+        el.textContent=toEs?(el.getAttribute("data-es")||el.__enText):el.__enText;
+      });
       document.querySelectorAll("[placeholder]").forEach(el=>{const t=(el.getAttribute("placeholder")||"").trim();if(toEs){if(DICT[t]!==undefined){if(el.__ph===undefined)el.__ph=el.getAttribute("placeholder");el.setAttribute("placeholder",DICT[t]);}}else{if(el.__ph!==undefined)el.setAttribute("placeholder",el.__ph);}});
       applyAttrs(toEs, "title", "__title");
       applyAttrs(toEs, "aria-label", "__aria");
