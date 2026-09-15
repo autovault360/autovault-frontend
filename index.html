@@ -3055,10 +3055,8 @@
       }catch(_){}
     }
     langBtns.forEach(function(btn){ btn.addEventListener("click", toggleLang); });
-    try{
-      var saved = localStorage.getItem("av_lang") || localStorage.getItem("av_landing_lang");
-      if(saved==="es"){es=true;document.documentElement.lang="es";apply(true);}
-    }catch(_){}
+    // The landing page always opens in English. Spanish is selected manually
+    // via the top-right toggle; the saved preference still applies to other pages.
     paintLang();
   })();
 </script>
