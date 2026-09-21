@@ -17518,6 +17518,7 @@
     <script src="/api-config.js"></script>
     <script src="/auth-portal.js"></script>
     <script src="/api.js"></script>
+    <script src="/deal-profit.js"></script>
     <script src="/finance-persist.js"></script>
     <script src="/vehicles-live.js"></script>
     <script src="/wholesale/wholesale-shell.js"></script>
@@ -21197,7 +21198,8 @@
                     <div class="pcalc-inputwrap" id="pcalcSellWrap">
                       <span>$</span>
                       <input
-                        type="number"
+                        class="av-num"
+                        type="text"
                         id="pcalcSell"
                         inputmode="decimal"
                         min="0"
@@ -25185,11 +25187,10 @@
                       margin-top: 4px;
                     "
                   >
-                    The final funding check from the finance company — already
-                    includes any dealer reserve / finance income. If entered,
-                    this becomes the amount received for profit (sales tax &amp;
-                    registration are still subtracted). Leave blank to use the
-                    sold price.
+                    Funding check from the finance company (for your records).
+                    Sales tax and registration are pulled out of this check.
+                    Profit always uses the vehicle sold price — a larger check
+                    does not increase profit.
                   </div>
                   <div
                     id="djNetDetails"
@@ -29070,10 +29071,8 @@
                 oninput="pvNetCheckInput()"
               />
               <div class="pv-hint">
-                The final funding check from the finance company — already
-                includes any dealer reserve / finance income. If entered, it
-                becomes the amount received for profit (tax &amp; registration
-                still subtracted). Blank = use sale price.
+                Funding check from the finance company. Tax and registration
+                are pulled out of this check. Profit uses the sale price.
               </div>
             </div>
             <div></div>
@@ -34208,8 +34207,8 @@
             .map(
               (a, i) => `<div class="pv-addon-row">
       <input type="text" placeholder="e.g. Warranty" value="${String(a.name || "").replace(/"/g, "&quot;")}" oninput="pvAddOnEdit(${i},'name',this.value)">
-      <input type="number" placeholder="0" value="${a.cost || ""}" oninput="pvAddOnEdit(${i},'cost',this.value)">
-      <input type="number" placeholder="0" value="${a.price || ""}" oninput="pvAddOnEdit(${i},'price',this.value)">
+      <input class="av-num" type="text" inputmode="decimal" placeholder="0" value="${a.cost ? avNumFmt(a.cost) : ""}" oninput="pvAddOnEdit(${i},'cost',this.value)">
+      <input class="av-num" type="text" inputmode="decimal" placeholder="0" value="${a.price ? avNumFmt(a.price) : ""}" oninput="pvAddOnEdit(${i},'price',this.value)">
       <button type="button" class="pv-addon-del" onclick="pvRemoveAddOn(${i})" title="Remove">\u2715</button>
     </div>`,
             )
@@ -34324,11 +34323,32 @@
               : pvNum("pvCommission");
         const usingNC = netCheck > 0;
         const netRevenue = usingNC ? netCheck - salesTax - regFees : sale;
-        // When financed Net Check is used, add-on sale is already inside the check.
-        const revenueForProfit = usingNC
-          ? netRevenue
-          : sale + addOnSale;
-        const netProfit = revenueForProfit - totalVehicleCost - commission;
+        const revenueForProfit =
+          typeof AVDealProfit !== "undefined"
+            ? AVDealProfit.dealerRevenue({
+                soldPrice: sale,
+                addOnRevenue: addOnSale,
+                netCheck: usingNC ? netCheck : null,
+                salesTax,
+                licenseFees: regFees,
+              })
+            : sale > 0
+              ? sale + addOnSale
+              : usingNC
+                ? netRevenue
+                : 0;
+        const netProfit =
+          typeof AVDealProfit !== "undefined"
+            ? AVDealProfit.netProfit({
+                soldPrice: sale,
+                addOnRevenue: addOnSale,
+                vehicleCost: totalVehicleCost,
+                commission,
+                netCheck: usingNC ? netCheck : null,
+                salesTax,
+                licenseFees: regFees,
+              })
+            : revenueForProfit - totalVehicleCost - commission;
         const roi =
           totalVehicleCost > 0 ? (netProfit / totalVehicleCost) * 100 : 0;
         return {
@@ -40240,18 +40260,25 @@
           : legacyAddOnScalar > 0
             ? legacyAddOnScalar
             : addOnCostFromItems;
-        // Sales tax & registration are collected for the state (pass-through) — NOT dealer cost.
+        const soldForReg =
+          isSoldRow || v.sold || v.status === "Sold" || v.status === "Sold Loss";
+        const dealerRegFees =
+          v.dealerRegFees != null && v.dealerRegFees !== ""
+            ? Number(v.dealerRegFees) || 0
+            : soldForReg
+              ? 0
+              : Number(v.regFees) || 0;
+        // Sales tax & customer license/reg are collected for the state (pass-through).
+        // Dealer title/reg paid at purchase is real cost and belongs in all-in.
         const totalInvestment =
           (Number(v.price) || 0) +
           (Number(v.fees) || 0) +
+          dealerRegFees +
           repairs +
-          addOns;
-        const allInCost =
-          (Number(v.price) || 0) +
-          (Number(v.fees) || 0) +
-          repairs +
+          addOns +
           attachedExp;
-        const totalVehicleCost = totalInvestment + flooringCost + attachedExp;
+        const allInCost = totalInvestment;
+        const totalVehicleCost = totalInvestment + flooringCost;
         const allInPlusFlooring = allInCost + flooringCost;
         const hasRep = !!(v.rep && String(v.rep).trim());
         const commRate =
@@ -40259,17 +40286,6 @@
             ? v.commissionPct / 100
             : 0.04;
         const repForComm = (salesReps || []).find((x) => x.name === v.rep);
-        const autoCommission =
-          isSoldRow && hasRep
-            ? (repForComm && repForComm.commissionType === "flat"
-                ? Math.max(0, Math.round(Number(repForComm.commissionFlat) || 0))
-                : Math.round((Number(v.price) || 0) * commRate)) + extraRepPay
-            : 0;
-        const commission = isSoldRow
-          ? v.commissionOverride !== null && v.commissionOverride !== undefined
-            ? Number(v.commissionOverride)
-            : autoCommission
-          : 0;
         // Add-on items: price = customer upcharge revenue; cost counted above in COGS
         const addOnRevenue = (v.addOnItems || []).reduce(
           (s, a) => s + (Number(a.price) || 0),
@@ -40289,24 +40305,70 @@
         const estimatedSale = canComputeSale ? baseSale + addOnRevenue : null;
         const salesTaxCollected = Number(v.customerSalesTax) || 0;
         const regFeesCollected = Number(v.customerRegFees) || 0;
-        // Net Check − Sales Tax − Reg Fees = amount applied to profit,
-        // then subtract vehicle cost + commission (tax/reg are not profit).
+        // Net check − tax − reg is funding. Profit uses sold price when present.
         const hasNetCheck =
           v.netCheck !== null &&
           v.netCheck !== undefined &&
           v.netCheck !== "";
         const netCheckAmt = hasNetCheck ? Number(v.netCheck) || 0 : null;
         const netCheckAppliedToProfit = hasNetCheck
-          ? Math.max(0, netCheckAmt - salesTaxCollected - regFeesCollected)
+          ? netCheckAmt - salesTaxCollected - regFeesCollected
           : null;
-        const netProfit = !canComputeSale
+        // Sold price is the deal. Net check is funding only — used as
+        // revenue only when there is no sold price.
+        const revenueForProfit = !canComputeSale
           ? null
-          : hasNetCheck
-            ? netCheckAppliedToProfit - totalVehicleCost - commission
-            : estimatedSale - totalVehicleCost - commission;
-        const grossProfit = canComputeSale
-          ? baseSale - (Number(v.price) || 0)
-          : null;
+          : typeof AVDealProfit !== "undefined"
+            ? AVDealProfit.dealerRevenue({
+                soldPrice: hasSoldPrice ? baseSale : 0,
+                addOnRevenue,
+                netCheck: hasNetCheck ? netCheckAmt : null,
+                salesTax: salesTaxCollected,
+                licenseFees: regFeesCollected,
+              })
+            : hasSoldPrice
+              ? estimatedSale
+              : hasNetCheck
+                ? netCheckAppliedToProfit
+                : null;
+        const grossBeforeComm =
+          revenueForProfit != null ? revenueForProfit - totalVehicleCost : null;
+        // PAUSED: commission auto-calculation disabled — only manual overrides apply
+        const autoCommission = 0;
+        // const autoCommission =
+        //   isSoldRow && hasRep && grossBeforeComm != null
+        //     ? (typeof calcRepCommissionAmount === "function"
+        //         ? calcRepCommissionAmount(repForComm || v.rep, grossBeforeComm)
+        //         : Math.max(
+        //             0,
+        //             Math.round(grossBeforeComm * commRate),
+        //           )) + extraRepPay
+        //     : 0;
+        const commission = isSoldRow
+          ? v.commissionOverride !== null && v.commissionOverride !== undefined
+            ? Number(v.commissionOverride)
+            : autoCommission
+          : 0;
+        const netProfit =
+          grossBeforeComm == null
+            ? null
+            : typeof AVDealProfit !== "undefined"
+              ? AVDealProfit.netProfit({
+                  soldPrice: hasSoldPrice ? baseSale : 0,
+                  addOnRevenue,
+                  vehicleCost: totalVehicleCost,
+                  commission,
+                  netCheck: hasNetCheck ? netCheckAmt : null,
+                  salesTax: salesTaxCollected,
+                  licenseFees: regFeesCollected,
+                })
+              : grossBeforeComm - commission;
+        const grossProfit =
+          canComputeSale && baseSale != null
+            ? baseSale - (Number(v.price) || 0)
+            : revenueForProfit != null
+              ? revenueForProfit - (Number(v.price) || 0)
+              : null;
         const roi =
           canComputeSale && totalVehicleCost > 0
             ? (netProfit / totalVehicleCost) * 100
@@ -40335,6 +40397,7 @@
           allInPlusFlooring,
           totalVehicleCost,
           attachedExp,
+          dealerRegFees,
           commission,
           autoCommission,
           estimatedSale,
@@ -40408,7 +40471,10 @@
         };
       })();
       var __MONEY_IDS = {
+        addOnCost: 1,
         addOnPrice: 1,
+        avFees: 1,
+        avPrice: 1,
         djCommAmt: 1,
         djNetCheck: 1,
         djRegFee: 1,
@@ -40417,10 +40483,21 @@
         commAmt: 1,
         empSalary: 1,
         empRate: 1,
+        expAmount: 1,
         fdDailyRate: 1,
         fdExtraFees: 1,
         fdPayoffAmount: 1,
         fdRate: 1,
+        pvCommission: 1,
+        pvExpenses: 1,
+        pvFees: 1,
+        pvFlooring: 1,
+        pvNetCheck: 1,
+        pvPrice: 1,
+        pvRegFees: 1,
+        pvRepairs: 1,
+        pvSalePrice: 1,
+        pvSalesTax: 1,
         repModalBase: 1,
         repairCost: 1,
         vdpRegFees: 1,
@@ -42418,15 +42495,20 @@
           repairs = costRows.reduce((s, r) => s + n(r.repairs) + n(r.attachedExp), 0);
           totalCost = costRows.reduce((s, r) => s + n(r.allInCost), 0);
           commission = costRows.reduce((s, r) => s + n(r.commission), 0);
-          if (stats && stats.soldThisMonth) {
+          monthCount = liveSoldRows.length;
+          monthProfit = liveSoldRows.reduce(
+            (s, r) => s + (r.netProfit == null ? 0 : n(r.netProfit)),
+            0,
+          );
+          if (
+            monthCount === 0 &&
+            stats &&
+            stats.soldThisMonth &&
+            n(stats.soldThisMonth.count) > 0 &&
+            !(vehicles && vehicles.length)
+          ) {
             monthCount = n(stats.soldThisMonth.count);
             monthProfit = n(stats.soldThisMonth.profit);
-          } else {
-            monthCount = liveSoldRows.length;
-            monthProfit = liveSoldRows.reduce(
-              (s, r) => s + (r.netProfit == null ? 0 : n(r.netProfit)),
-              0,
-            );
           }
           monthSoldValue = 0;
           const filing =
@@ -43114,6 +43196,8 @@
       }
 
       function recalcRepCommissions(names) {
+        // PAUSED: commission auto-calculation disabled — rep rate changes no longer backfill sold deals
+        return;
         vehicles.forEach((v) => {
           if (v.sold && names.includes(v.rep) && v.soldPrice) {
             const rep = salesReps.find((x) => x.name === v.rep);
@@ -43678,23 +43762,24 @@
       window.confirmArchiveSalesRep = confirmArchiveSalesRep;
 
       // auto-calc commission when a rep is picked on a deal jacket
+      // PAUSED: commission auto-calculation disabled — rep selection no longer fills rate/amount
       function djRepChanged() {
         const sel = document.getElementById("djRep");
         const name = sel ? sel.value : "";
         if (sel) sel.dataset.selectedRep = name || "";
-        const rep = salesReps.find((x) => x.name === name);
-        if (rep && rep.commissionType === "flat") {
-          djCommMode = "amt";
-          const amtEl = document.getElementById("djCommAmt");
-          if (amtEl) amtEl.value = Number(rep.commissionFlat) || 0;
-        } else {
-          const rate = repRate(name);
-          if (rate != null) {
-            djCommMode = "pct";
-            syncPctControl(rate);
-          }
-        }
-        dealRecalc();
+        // const rep = salesReps.find((x) => x.name === name);
+        // if (rep && rep.commissionType === "flat") {
+        //   djCommMode = "amt";
+        //   const amtEl = document.getElementById("djCommAmt");
+        //   if (amtEl) amtEl.value = Number(rep.commissionFlat) || 0;
+        // } else {
+        //   const rate = repRate(name);
+        //   if (rate != null) {
+        //     djCommMode = "pct";
+        //     syncPctControl(rate);
+        //   }
+        // }
+        // dealRecalc();
       }
 
       // ---------- EVENTS ----------
@@ -44475,8 +44560,9 @@
         <div class="vd-line"><span>Repairs</span><span>${fmt(r.repairs)}</span></div>
         <div class="vd-line"><span>Flooring Cost</span><span>${r.flooringOverride !== null && r.flooringOverride !== undefined ? fmt(Number(r.flooringOverride) || 0) : r.flooringCost > 0 ? fmt(r.flooringCost) : "—"}</span></div>
         <div class="vd-line"><span>Flooring Age</span><span>${flooringConfig.applied ? r.daysOnLot + (r.daysOnLot === 1 ? " Day" : " Days") : "—"}</span></div>
-        <div class="vd-line"><span>Registration Fees</span><span>${fmt(r.regFees)}</span></div>
-        <div class="vd-line"><span>Sales Tax</span><span>${fmt(r.salesTaxCollected)}</span></div>
+        <div class="vd-line"><span>Title / Reg (dealer)</span><span>${fmt(r.dealerRegFees)}</span></div>
+        <div class="vd-line"><span>Sales Tax (customer)</span><span>${fmt(r.salesTaxCollected)}</span></div>
+        <div class="vd-line"><span>Reg. Fees (customer)</span><span>${fmt(r.regFeesCollected)}</span></div>
         <div class="vd-line"><span>Additional Add-ons</span><span>${r.addOns > 0 ? fmt(r.addOns) : "—"}</span></div>
         <div class="vd-line"><span>Commission</span><span>${fmt(r.commission)}</span></div>
         <div class="vd-line"><span>Additional Sales Rep Payments</span><span>${r.extraRepPay > 0 ? fmt(r.extraRepPay) : "—"}</span></div>
@@ -45505,8 +45591,9 @@
       const VDP_EDIT_FIELDS = {
         price: { label: "Purchase Price" },
         fees: { label: "Auction / Doc Fees" },
-        salesTax: { label: "Sales Tax" },
-        regFees: { label: "Reg. Fees" },
+        dealerRegFees: { label: "Title / Reg (dealer)" },
+        salesTax: { label: "Sales Tax (customer)" },
+        customerRegFees: { label: "Reg. Fees (customer)" },
         addOns: { label: "Add-ons cost" },
         soldPrice: { label: "Sale Price" },
         flooringOverride: { label: "Flooring Cost", override: true },
@@ -45567,6 +45654,12 @@
         if (field === "commissionOverride") return Math.round(r.commission);
         if (field === "soldPrice")
           return Math.round(v.soldPrice || r.baseSale || 0);
+        if (field === "dealerRegFees") return Math.round(Number(r.dealerRegFees) || 0);
+        if (field === "salesTax")
+          return Math.round(Number(v.customerSalesTax != null ? v.customerSalesTax : v.salesTax) || 0);
+        if (field === "customerRegFees")
+          return Math.round(Number(v.customerRegFees != null ? v.customerRegFees : 0) || 0);
+        if (field === "addOns") return Math.round(Number(r.addOns) || 0);
         return Math.round(Number(v[field]) || 0);
       }
       function vdpEditCost(field) {
@@ -45576,7 +45669,7 @@
         const host = document.getElementById("vdpEd_" + field);
         if (!host || host.querySelector("input")) return;
         const cur = vdpCurrentValue(v, field);
-        host.innerHTML = `<input class="vdp-edit-input" type="number" step="1" min="0" value="${cur}"
+        host.innerHTML = `<input class="av-num vdp-edit-input" type="text" inputmode="decimal" step="1" min="0" value="${avNumFmt(cur)}"
     onblur="vdpCommitCost('${field}', this.value)"
     onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){this.dataset.cancel='1';this.blur();}">`;
         const inp = host.querySelector("input");
@@ -45612,8 +45705,18 @@
           field,
           oldVal === undefined || oldVal === null ? oldEffective : oldVal,
         );
-        v[field] = n;
-        if (field === "salesTax") v.customerSalesTax = n;
+        if (field === "salesTax") {
+          v.salesTax = n;
+          v.customerSalesTax = n;
+        } else if (field === "dealerRegFees") {
+          v.dealerRegFees = n;
+          if (!(v.sold || vehicleIsSold(v))) v.regFees = n;
+        } else if (field === "customerRegFees") {
+          v.customerRegFees = n;
+          if (v.sold || vehicleIsSold(v)) v.regFees = n;
+        } else {
+          v[field] = n;
+        }
         vdpSetSaving(host, true);
         try {
           if (window.AVVehicles && v.id) {
@@ -45645,7 +45748,7 @@
           v.netCheck !== null && v.netCheck !== undefined
             ? Math.round(Number(v.netCheck) || 0)
             : "";
-        host.innerHTML = `<input class="vdp-edit-input" type="number" step="0.01" min="0" max="99999999.99" value="${cur}" placeholder="0"
+        host.innerHTML = `<input class="av-num vdp-edit-input" type="text" inputmode="decimal" step="0.01" min="0" max="99999999.99" value="${cur === "" ? "" : avNumFmt(cur)}" placeholder="0"
     onblur="vdpCommitNetCheck(this.value, this)"
     onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){this.dataset.cancel='1';this.blur();}">`;
         const inp = host.querySelector("input");
@@ -45962,6 +46065,7 @@
         };
         push("Purchase price", Number(v.price) || 0);
         push("Fees", Number(v.fees) || Number(r.fees) || 0);
+        push("Title / Reg (dealer)", Number(r.dealerRegFees) || 0);
         push("Repairs", Number(r.repairs) || 0);
         push("Flooring", Number(r.flooringCost) || 0);
         push("Add-ons", Number(r.addOns) || 0);
@@ -45976,7 +46080,10 @@
         if (sell) {
           const vin = v.vin;
           if (pcalcSellByVin[vin] != null && pcalcSellByVin[vin] !== "") {
-            sell.value = pcalcSellByVin[vin];
+            sell.value =
+              typeof avNumFmt === "function"
+                ? avNumFmt(pcalcSellByVin[vin])
+                : pcalcSellByVin[vin];
           } else {
             const sold = Number(v.soldPrice);
             const asking = Number(v.askingPrice);
@@ -45986,7 +46093,12 @@
             else
               suggested =
                 Math.round(((r.totalVehicleCost || 0) * 1.2) / 100) * 100;
-            sell.value = suggested > 0 ? String(suggested) : "";
+            sell.value =
+              suggested > 0
+                ? typeof avNumFmt === "function"
+                  ? avNumFmt(String(suggested))
+                  : String(suggested)
+                : "";
           }
         }
         pcalcUpdate();
@@ -46115,21 +46227,21 @@
         document.getElementById("vdpBreakdown").innerHTML = `
     <div class="vdp-row"><span class="vdp-row-label">Purchase Price</span><span class="vdp-row-value" id="vdpEd_price">${vdpUndoBtn(v, "price")}<span class="vdp-ed" onclick="vdpEditCost('price')" title="Click to edit">${fmt(r.price)}</span></span></div>
     <div class="vdp-row"><span class="vdp-row-label">Auction / Doc Fees</span><span class="vdp-row-value" id="vdpEd_fees">${vdpUndoBtn(v, "fees")}<span class="vdp-ed" onclick="vdpEditCost('fees')" title="Click to edit">${fmt(r.fees)}</span></span></div>
+    <div class="vdp-row"><span class="vdp-row-label">Title / Reg (dealer)</span><span class="vdp-row-value" id="vdpEd_dealerRegFees">${vdpUndoBtn(v, "dealerRegFees")}<span class="vdp-ed" onclick="vdpEditCost('dealerRegFees')" title="Click to edit title/reg paid at purchase">${fmt(r.dealerRegFees)}</span></span></div>
     <div class="vdp-row"><span class="vdp-row-label">Repairs (${(r.repairsList || []).length} items)</span><span class="vdp-row-value"><span class="vdp-ed" onclick="openRepairsModal('${r.vin}')" title="Click to edit repair items">${fmt(r.repairs)}</span></span></div>
-    <div class="vdp-row"><span class="vdp-row-label">Flooring Cost${r.flooringDetail?.lender ? " — " + r.flooringDetail.lender : ""}</span><span class="vdp-row-value" id="vdpEd_flooringOverride" style="color:var(--red);">${vdpUndoBtn(v, "flooringOverride")}${v.flooringOverride !== null && v.flooringOverride !== undefined ? `<button class="vdp-reset" onclick="vdpResetCost('flooringOverride')" title="Back to auto-calculated">reset</button>` : `<span class="vdp-auto-tag">auto</span>`}<span class="vdp-ed" onclick="vdpEditCost('flooringOverride')" title="Click to edit">${v.flooringOverride !== null && v.flooringOverride !== undefined ? fmt(Number(v.flooringOverride) || 0) : r.flooringCost > 0 ? fmt(r.flooringCost) : "—"}</span></span></div>
-    <div class="vdp-row"><span class="vdp-row-label">Sales Tax</span><span class="vdp-row-value" id="vdpEd_salesTax">${vdpUndoBtn(v, "salesTax")}<span class="vdp-ed" onclick="vdpEditCost('salesTax')" title="Click to edit">${fmt(r.salesTax)}</span></span></div>
-    <div class="vdp-row"><span class="vdp-row-label">Reg. Fees</span><span class="vdp-row-value" id="vdpEd_regFees">${vdpUndoBtn(v, "regFees")}<span class="vdp-ed" onclick="vdpEditCost('regFees')" title="Click to edit">${fmt(r.regFees)}</span></span></div>
+    ${r.attachedExp > 0 ? `<div class="vdp-row"><span class="vdp-row-label">Other vehicle expenses</span><span class="vdp-row-value">${fmt(r.attachedExp)}</span></div>` : ""}
     <div class="vdp-row"><span class="vdp-row-label">Add-ons (cost)</span><span class="vdp-row-value" id="vdpEd_addOns">${vdpUndoBtn(v, "addOns")}<span class="vdp-ed" onclick="vdpEditCost('addOns')" title="Click to edit">${r.addOns > 0 ? fmt(r.addOns) : "—"}</span></span></div>
-    <div class="vdp-row"><span class="vdp-row-label">Commission</span><span class="vdp-row-value" id="vdpEd_commissionOverride" style="color:var(--purple);">${vdpUndoBtn(v, "commissionOverride")}${v.commissionOverride !== null && v.commissionOverride !== undefined ? `<button class="vdp-reset" onclick="vdpResetCost('commissionOverride')" title="Back to auto-calculated">reset</button>` : `<span class="vdp-auto-tag">auto</span>`}<span class="vdp-ed" onclick="vdpEditCost('commissionOverride')" title="Click to edit">${fmt(r.commission)}</span></span></div>
     <div class="vdp-row subtotal"><span class="vdp-row-label" style="font-weight:800;color:var(--text);">All-In Vehicle Cost</span><span class="vdp-row-value" style="font-size:15px;color:var(--c-cost);">${fmt(r.allInCost != null ? r.allInCost : r.totalVehicleCost)}</span></div>
+    <div class="vdp-row"><span class="vdp-row-label">Flooring Cost${r.flooringDetail?.lender ? " — " + r.flooringDetail.lender : ""}</span><span class="vdp-row-value" id="vdpEd_flooringOverride" style="color:var(--red);">${vdpUndoBtn(v, "flooringOverride")}${v.flooringOverride !== null && v.flooringOverride !== undefined ? `<button class="vdp-reset" onclick="vdpResetCost('flooringOverride')" title="Back to auto-calculated">reset</button>` : `<span class="vdp-auto-tag">auto</span>`}<span class="vdp-ed" onclick="vdpEditCost('flooringOverride')" title="Click to edit">${v.flooringOverride !== null && v.flooringOverride !== undefined ? fmt(Number(v.flooringOverride) || 0) : r.flooringCost > 0 ? fmt(r.flooringCost) : "—"}</span></span></div>
+    ${r.flooringCost > 0 || (v.flooringOverride !== null && v.flooringOverride !== undefined) ? `<div class="vdp-row subtotal"><span class="vdp-row-label" style="font-weight:700;">All-In + Flooring</span><span class="vdp-row-value" style="color:var(--c-cost);">${fmt(r.totalVehicleCost)}</span></div>` : ""}
     ${
-      v.customerSalesTax || v.customerRegFees
+      r.sold || vehicleIsSold(v)
         ? `
     <div style="margin-top:10px;padding:10px 12px;background:rgba(58,160,255,0.06);border:1px solid rgba(58,160,255,0.15);border-radius:9px;font-size:11.5px;color:var(--muted);line-height:1.6;">
       <div style="font-size:10px;letter-spacing:.8px;text-transform:uppercase;font-weight:800;color:var(--blue);margin-bottom:6px;">Collected from Customer → State</div>
-      ${v.customerSalesTax ? `<div style="display:flex;justify-content:space-between;"><span>Sales Tax</span><span style="font-family:var(--mono);font-weight:700;">${fmt(v.customerSalesTax)}</span></div>` : ""}
-      ${v.customerRegFees ? `<div style="display:flex;justify-content:space-between;"><span>Reg. Fees</span><span style="font-family:var(--mono);font-weight:700;">${fmt(v.customerRegFees)}</span></div>` : ""}
-      <div style="margin-top:4px;font-size:10.5px;color:var(--muted);opacity:.7;">Not deducted from profit — passed to the state.</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><span>Sales Tax</span><span class="vdp-row-value" id="vdpEd_salesTax" style="margin:0;">${vdpUndoBtn(v, "salesTax")}<span class="vdp-ed" onclick="vdpEditCost('salesTax')" title="Click to edit">${fmt(r.salesTaxCollected)}</span></span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><span>Reg. Fees</span><span class="vdp-row-value" id="vdpEd_customerRegFees" style="margin:0;">${vdpUndoBtn(v, "customerRegFees")}<span class="vdp-ed" onclick="vdpEditCost('customerRegFees')" title="Click to edit">${fmt(r.regFeesCollected)}</span></span></div>
+      <div style="margin-top:4px;font-size:10.5px;color:var(--muted);opacity:.7;">Pass-through — not dealer profit. On a financed deal they are taken out of the net check.</div>
     </div>`
         : ""
     }
@@ -46138,13 +46250,15 @@
       ${r.addOnRevenue > 0 ? `<div class="vdp-row"><span class="vdp-row-label">Add-On Revenue (${(r.addOnItems || []).length} items)</span><span class="vdp-row-value" style="color:var(--green);">+ ${fmt(r.addOnRevenue)}</span></div>` : ""}
       ${r.addOnRevenue > 0 && r.estimatedSale != null ? `<div class="vdp-row"><span class="vdp-row-label" style="font-weight:700;">Total Revenue</span><span class="vdp-row-value" style="color:var(--blue);font-size:14px;">${fmt(r.estimatedSale)}</span></div>` : ""}
       <div class="vdp-row"><span class="vdp-row-label">Total Amount Collected</span><span class="vdp-row-value" style="color:var(--blue);font-weight:700;">${fmt(r.totalCollected)}</span></div>
-      <div class="vdp-row"><span class="vdp-row-label">Net Check <span style="color:var(--muted);font-weight:400;text-transform:none;">(finance remittance)</span></span><span class="vdp-row-value" id="vdpEd_netCheck">${r.hasNetCheck ? `<button class="vdp-reset" onclick="vdpClearNetCheck()" title="Clear net check and use sold-price profit">clear</button>` : ""}<span class="vdp-ed" onclick="vdpEditNetCheck()" title="Click to enter actual net check from finance">${r.hasNetCheck ? fmt(r.netCheck) : "Enter net check"}</span></span></div>
+      <div class="vdp-row"><span class="vdp-row-label">Net Check <span style="color:var(--muted);font-weight:400;text-transform:none;">(finance remittance)</span></span><span class="vdp-row-value" id="vdpEd_netCheck">${r.hasNetCheck ? `<button class="vdp-reset" onclick="vdpClearNetCheck()" title="Clear net check">clear</button>` : ""}<span class="vdp-ed" onclick="vdpEditNetCheck()" title="Click to enter actual net check from finance">${r.hasNetCheck ? fmt(r.netCheck) : "Enter net check"}</span></span></div>
       ${r.hasNetCheck ? `<div class="vdp-row"><span class="vdp-row-label" style="color:var(--muted);font-weight:500;">− Sales Tax</span><span class="vdp-row-value" style="color:var(--muted);">− ${fmt(r.salesTaxCollected)}</span></div>` : ""}
       ${r.hasNetCheck ? `<div class="vdp-row"><span class="vdp-row-label" style="color:var(--muted);font-weight:500;">− Registration Fees</span><span class="vdp-row-value" style="color:var(--muted);">− ${fmt(r.regFeesCollected)}</span></div>` : ""}
-      ${r.hasNetCheck ? `<div class="vdp-row"><span class="vdp-row-label" style="font-weight:700;">Amount Applied to Profit</span><span class="vdp-row-value" style="color:var(--blue);font-weight:700;">${fmt(r.netCheckAppliedToProfit)}</span></div>` : ""}
+      ${r.hasNetCheck ? `<div class="vdp-row"><span class="vdp-row-label" style="font-weight:700;">Net to dealer (funding)</span><span class="vdp-row-value" style="color:var(--blue);font-weight:700;">${fmt(r.netCheckAppliedToProfit)}</span></div>` : ""}
       ${r.hasNetCheck ? `<div class="vdp-row"><span class="vdp-row-label" style="color:var(--muted);font-weight:500;">vs Collected</span><span class="vdp-row-value" style="color:${r.netCheck - r.totalCollected > 0 ? "var(--green)" : r.netCheck - r.totalCollected < 0 ? "var(--red)" : "var(--muted)"};">${fmtSigned(r.netCheck - r.totalCollected)}</span></div>` : ""}
+      <div class="vdp-row"><span class="vdp-row-label" style="color:var(--muted);font-weight:500;">− Vehicle cost${r.flooringCost > 0 ? " (all-in + flooring)" : ""}</span><span class="vdp-row-value" style="color:var(--muted);">− ${fmt(r.totalVehicleCost)}</span></div>
+      <div class="vdp-row"><span class="vdp-row-label">Commission</span><span class="vdp-row-value" id="vdpEd_commissionOverride" style="color:var(--purple);">${vdpUndoBtn(v, "commissionOverride")}${v.commissionOverride !== null && v.commissionOverride !== undefined ? `<button class="vdp-reset" onclick="vdpResetCost('commissionOverride')" title="Back to auto-calculated">reset</button>` : `<span class="vdp-auto-tag">auto</span>`}<span class="vdp-ed" onclick="vdpEditCost('commissionOverride')" title="Click to edit">${fmt(r.commission)}</span></span></div>
       <div class="vdp-row" style="padding-top:10px;border-top:1px solid rgba(255,255,255,0.08);">
-        <span class="vdp-row-label" style="font-weight:800;color:var(--text);font-size:14px;">Net Profit${r.hasNetCheck ? ' <span style="color:var(--muted);font-weight:400;font-size:11px;">(from net check)</span>' : ""}</span>
+        <span class="vdp-row-label" style="font-weight:800;color:var(--text);font-size:14px;">Net Profit</span>
         <span class="vdp-row-value" style="font-size:18px;color:${profitColor};">${fmtSigned(r.netProfit)}</span>
       </div>
     </div>
@@ -47929,7 +48043,7 @@
         <div class="rm-change-lead">Rent or cost change? Enter the <b>new amount</b> and the <b>month it starts</b>. The old amount stays on every month before that — this one takes over from then on.</div>
         <div class="rm-change-row">
           <label>New amount $</label>
-          <input type="text" inputmode="decimal" id="rmChgAmt_${e.id}" placeholder="${Math.round(Number(e.amount) || 0)}">
+          <input class="av-num" type="text" inputmode="decimal" id="rmChgAmt_${e.id}" placeholder="${typeof avNumFmt === "function" ? avNumFmt(Math.round(Number(e.amount) || 0)) : Math.round(Number(e.amount) || 0)}">
           <label>Effective from</label>
           <input type="month" id="rmChgMon_${e.id}" value="${chgDef}">
           <button class="rm-btn change" type="button" onclick="recurChangeConfirm('${e.id}')">Apply change</button>
@@ -52701,7 +52815,7 @@
         const host = document.getElementById("djEd_" + field);
         if (!host || host.querySelector("input")) return;
         const cur = djCurrentCostValue(v, field);
-        host.innerHTML = `<input class="vdp-edit-input" type="number" step="1" min="0" value="${cur}"
+        host.innerHTML = `<input class="av-num vdp-edit-input" type="text" inputmode="decimal" step="1" min="0" value="${avNumFmt(cur)}"
     onblur="djCommitCost('${field}', this.value)"
     onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){this.dataset.cancel='1';this.blur();}">`;
         const inp = host.querySelector("input");
@@ -52980,7 +53094,10 @@
           parseFloat(document.getElementById("djStateTax").value) || 0;
         const regFee =
           parseFloat(document.getElementById("djRegFee").value) || 0;
-        const gross = soldPrice > 0 ? soldPrice - v.price : 0; // vehicle front-end gross
+        const gross =
+          soldPrice > 0
+            ? soldPrice - (Number(v.price) || 0)
+            : 0; // front-end: sale − purchase
         // commission — two-way percent <-> dollar (always on Sold Price / Gross)
         const amtEl = document.getElementById("djCommAmt");
         let commission, pct;
@@ -52993,9 +53110,11 @@
           syncPctControl(pct);
         } else {
           pct = djGetPct();
-          commission = Math.max(0, Math.round((gross * pct) / 100));
-          if (document.activeElement !== amtEl)
-            amtEl.value = commission > 0 ? commission : "";
+          // PAUSED: commission auto-calculation disabled — pct no longer auto-fills dollar amount
+          commission = Math.max(0, parseFloat(amtEl.value) || 0);
+          // commission = Math.max(0, Math.round((gross * pct) / 100));
+          // if (document.activeElement !== amtEl)
+          //   amtEl.value = commission > 0 ? commission : "";
         }
         // No rep + no explicitly-typed $ amount → commission is $0
         const djRepName = (
@@ -53012,22 +53131,38 @@
           pct = 0;
         }
         const vehicleCost = r.totalVehicleCost; // purchase + fees + repairs + flooring + expenses + add-on cost
-        const totalCost = vehicleCost + commission; // all money out (incl commission)
         const collected = soldPrice + addOnRev + stateTax + regFee;
-        // Net Check − Sales Tax − Reg Fees = amount applied to profit
         const netCheckApplied = hasNetCheck
-          ? Math.max(0, netCheckAmt - stateTax - regFee)
+          ? netCheckAmt - stateTax - regFee
           : null;
-        const netVehicle = hasNetCheck
-          ? netCheckApplied - totalCost
-          : soldPrice > 0
-            ? soldPrice - totalCost
-            : 0;
-        const totalProfit = hasNetCheck
-          ? netVehicle
-          : soldPrice > 0
-            ? netVehicle + addOnRev
-            : 0;
+        // Sold price is the deal. Net check is funding vs the sale, not extra profit.
+        const dealerRevenue =
+          typeof AVDealProfit !== "undefined"
+            ? AVDealProfit.dealerRevenue({
+                soldPrice,
+                addOnRevenue: addOnRev,
+                netCheck: hasNetCheck ? netCheckAmt : null,
+                salesTax: stateTax,
+                licenseFees: regFee,
+              })
+            : soldPrice > 0
+              ? soldPrice + addOnRev
+              : hasNetCheck
+                ? netCheckApplied
+                : 0;
+        const totalProfit =
+          typeof AVDealProfit !== "undefined"
+            ? AVDealProfit.netProfit({
+                soldPrice,
+                addOnRevenue: addOnRev,
+                vehicleCost,
+                commission,
+                netCheck: hasNetCheck ? netCheckAmt : null,
+                salesTax: stateTax,
+                licenseFees: regFee,
+              })
+            : dealerRevenue - vehicleCost - commission;
+        const totalCost = vehicleCost + commission;
         const roi = vehicleCost > 0 ? (totalProfit / vehicleCost) * 100 : 0;
         const rep = document.getElementById("djRep").value;
         const showMoney = soldPrice > 0 || hasNetCheck;
@@ -53047,9 +53182,7 @@
         const netSub = document.querySelector("#djKpiNet")?.parentElement
           ?.querySelector(".vdp-kpi-sub");
         if (netSub) {
-          netSub.textContent = hasNetCheck
-            ? "from net check"
-            : "after all costs";
+          netSub.textContent = "after all costs";
         }
         document.getElementById("djKpiRoi").textContent = showMoney
           ? Math.round(roi) + "%"
@@ -53105,18 +53238,15 @@
             const _h = document.getElementById("djSaleHint");
             if (_h)
               _h.textContent = showMoney
-                ? "Vehicle cost " +
-                  fmt(vehicleCost) +
-                  " \u00b7 sold " +
-                  (soldPrice > 0
-                    ? fmt(soldPrice)
+                ? (soldPrice > 0
+                    ? "Sold " + fmt(soldPrice)
                     : hasNetCheck
-                      ? fmt(netCheckAmt) + " check"
-                      : "\u2014") +
-                  (commission > 0 ? " \u00b7 commission " + fmt(commission) : "") +
-                  (addOnRev > 0 && !hasNetCheck
-                    ? " \u00b7 add-ons +" + fmt(addOnRev)
-                    : "")
+                      ? "Check " + fmt(netCheckAmt)
+                      : "Sold —") +
+                  " \u2212 cost " +
+                  fmt(vehicleCost) +
+                  (commission > 0 ? " \u2212 commission " + fmt(commission) : "") +
+                  (addOnRev > 0 ? " + add-ons " + fmt(addOnRev) : "")
                 : "Fill in the sale below \u2014 your profit updates live as you type.";
           }
         }
@@ -53149,18 +53279,12 @@
         set("djBrkGross", soldPrice > 0 ? fmtSigned(gross) : "\u2014");
         const netEl = document.getElementById("djBrkNet");
         if (netEl) {
-          netEl.textContent = showMoney ? fmtSigned(netVehicle) : "\u2014";
-          netEl.style.color = netVehicle >= 0 ? "var(--text)" : "var(--red)";
+          netEl.textContent = showMoney ? fmtSigned(totalProfit) : "\u2014";
+          netEl.style.color = totalProfit >= 0 ? "var(--text)" : "var(--red)";
         }
         set(
           "djBrkAddon",
-          hasNetCheck
-            ? addOnRev > 0
-              ? fmt(addOnRev) + " (in check)"
-              : "\u2014"
-            : addOnRev > 0
-              ? "+" + fmt(addOnRev)
-              : "\u2014",
+          addOnRev > 0 ? "+" + fmt(addOnRev) : "\u2014",
         );
         const tpEl = document.getElementById("djBrkTotalProfit");
         if (tpEl) {
@@ -53280,7 +53404,7 @@
         const cur = Math.round(
           parseFloat((document.getElementById(srcId) || {}).value) || 0,
         );
-        host.innerHTML = `<input class="vdp-edit-input" type="number" step="1" min="0" value="${cur}"
+        host.innerHTML = `<input class="av-num vdp-edit-input" type="text" inputmode="decimal" step="1" min="0" value="${avNumFmt(cur)}"
     onblur="djCommitColl('${kind}', this.value)"
     onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){this.dataset.cancel='1';this.blur();}">`;
         const inp = host.querySelector("input");
@@ -53473,8 +53597,8 @@
               (a, i) => `<div class="dj-addon-row">
       <input type="text" list="djAddOnCatList" placeholder="Category" value="${String(a.type || "").replace(/"/g, "&quot;")}" oninput="djAddOnEdit(${i},'type',this.value)">
       <input type="text" placeholder="Description" value="${String(a.desc || "").replace(/"/g, "&quot;")}" oninput="djAddOnEdit(${i},'desc',this.value)">
-      <input type="number" placeholder="0" value="${a.cost || ""}" oninput="djAddOnEdit(${i},'cost',this.value)">
-      <input type="number" placeholder="0" value="${a.price || ""}" oninput="djAddOnEdit(${i},'price',this.value)">
+      <input class="av-num" type="text" inputmode="decimal" placeholder="0" value="${a.cost ? avNumFmt(a.cost) : ""}" oninput="djAddOnEdit(${i},'cost',this.value)">
+      <input class="av-num" type="text" inputmode="decimal" placeholder="0" value="${a.price ? avNumFmt(a.price) : ""}" oninput="djAddOnEdit(${i},'price',this.value)">
       <button type="button" class="dj-addon-del" onclick="djRemoveAddOn(${i})" title="Remove">\u2715</button>
     </div>`,
             )
@@ -53933,7 +54057,12 @@
           pct = gross > 0 ? (commission / gross) * 100 : 0;
         } else {
           pct = djGetPct();
-          commission = Math.max(0, Math.round((gross * pct) / 100));
+          // PAUSED: commission auto-calculation disabled — save uses entered $ amount only
+          commission = Math.max(
+            0,
+            parseFloat(document.getElementById("djCommAmt").value) || 0,
+          );
+          // commission = Math.max(0, Math.round((gross * pct) / 100));
         }
         if (typeof djCommOpen !== "undefined" && !djCommOpen) {
           commission = 0;
@@ -55383,7 +55512,7 @@
         const netCheckMemo =
           ncSold.length === 0
             ? ""
-            : `<br><br><b style="color:var(--text);">Net Check deals (${ncSold.length}):</b> Statement <i>Revenue</i> uses sold price + add-on upcharges for accounting clarity. Per-vehicle Net Profit and CSV detail rows use Net Check − tax − reg − costs − commission. Sum of vehicle net profits: <b>${fmtSigned(sold.reduce((s, r) => s + (r.netProfit || 0), 0))}</b>.`;
+            : `<br><br><b style="color:var(--text);">Net Check deals (${ncSold.length}):</b> Statement <i>Revenue</i> and per-vehicle Net Profit both use sold price + add-on upcharges − all-in cost − commission. The net check is funding only (tax and reg are pulled out of the check, not added to profit). Sum of vehicle net profits: <b>${fmtSigned(sold.reduce((s, r) => s + (r.netProfit || 0), 0))}</b>.`;
 
         if (isEmpty) {
           document.getElementById("pnlStatement").innerHTML = `
