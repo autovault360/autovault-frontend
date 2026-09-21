@@ -204,7 +204,9 @@
       mileage: api.mileage ?? null,
       price: acquisition,
       fees,
-      /* Table "Sales Tax" / "Reg. Fees" columns show pass-through amounts from the deal */
+      /* Dealer title/reg paid at purchase — always kept, even after the car sells.
+         Table "Sales Tax" / "Reg. Fees" columns stay pass-through from the deal. */
+      dealerRegFees,
       salesTax: sold ? customerSalesTax : 0,
       regFees: sold ? customerRegFees : dealerRegFees,
       customerSalesTax,
@@ -659,6 +661,8 @@
       v.customerSalesTax != null ? v.customerSalesTax : ui.customerSalesTax;
     ui.customerRegFees =
       v.customerRegFees != null ? v.customerRegFees : ui.customerRegFees;
+    ui.dealerRegFees =
+      v.dealerRegFees != null ? v.dealerRegFees : ui.dealerRegFees;
     ui.commissionOverride = v.commissionOverride != null ? v.commissionOverride : ui.commissionOverride;
     ui.commissionPct = v.commissionPct != null ? v.commissionPct : ui.commissionPct;
     ui.ros = v.ros || ui.ros;
@@ -776,8 +780,24 @@
           }
         }
       }
-    } else if (field === "soldPrice") patch.soldPrice = value;
-    else if (field === "regFees") patch.registrationFees = value;
+    }     else if (field === "soldPrice") patch.soldPrice = value;
+    else if (field === "regFees" || field === "dealerRegFees") {
+      patch.registrationFees = value;
+      const v = findUiVehicle(vin);
+      if (v) {
+        v.dealerRegFees = value;
+        const sold = !!(v.sold || v.status === "Sold" || v.status === "Sold Loss");
+        if (!sold) v.regFees = value;
+      }
+    } else if (field === "customerRegFees") {
+      patch.licenseFees = value;
+      const v = findUiVehicle(vin);
+      if (v) {
+        v.customerRegFees = value;
+        const sold = !!(v.sold || v.status === "Sold" || v.status === "Sold Loss");
+        if (sold) v.regFees = value;
+      }
+    }
     else if (field === "date") {
       const dateStr = String(value || "").slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
@@ -790,13 +810,12 @@
       refreshUi();
       return v;
     } else if (field === "salesTax") {
+      patch.salesTaxAmount = value;
       const v = findUiVehicle(vin);
       if (v) {
         v.salesTax = value;
         v.customerSalesTax = value;
       }
-      refreshUi();
-      return v;
     } else if (field === "addOns") {
       const v = findUiVehicle(vin);
       if (v) v.addOns = value;
